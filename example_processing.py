@@ -6,7 +6,7 @@ from nielsenreader import read_all_data_new
 
 # where to read and write from
 read_dir = os.path.abspath(os.path.expanduser('~') + '/Cereal/')
-outfile=read_dir+'raw-cereal-all'
+outfile=read_dir+'/raw-cereal-all'
 
 # Specify which dmas /modules /columns to keep
 dmas=[506,517,556, 602, 751,753]
