@@ -100,6 +100,7 @@ def get_stores(read_dir,statelist,my_year,storelist=None,dmalist=None):
 	stores=pd.read_table(fns[0],index_col='store_code_uc')
 	stores.fips_state_descr.value_counts()
 	stores['channel_code']=stores.channel_code.astype('category')
+	stores['retailer_code']=stores.retailer_code.combine_first(stores.parent_code)
 
 	if statelist:
 		stores=stores[stores.fips_state_descr.isin(statelist)]
@@ -114,12 +115,13 @@ def get_stores(read_dir,statelist,my_year,storelist=None,dmalist=None):
 # Utilities to read and write parquet files
 ##
 
-def read_parquet_by_dma(pq_file,mydmas=None,cols=None):
-	df=pq.read_pandas(pq_file,columns=cols,nthreads=4).to_pandas()
-	if mydmas:
-		return df[df.dma_code.isin(mydmas)]
-	else:
-		return df
+# can pass a wrapper that processes each group and list of columns
+def read_parquet_groups(pq_file,read_func=pd.DataFrame,col_list=None):
+    parquet_file = pq.ParquetFile(pq_file)
+    super_df =[]
+    for i in range(0,parquet_file.num_row_groups):
+        super_df.append(read_func(parquet_file.read_row_group(i,nthreads=4,columns=col_list,use_pandas_metadata=True).to_pandas(nthreads=4)))
+    return pd.concat(super_df, axis=0)
 
 def write_by_dma(super_df,filename):
 	# Write our data to a parquet file -- each row group is a a DMA
