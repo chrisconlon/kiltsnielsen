@@ -31,6 +31,7 @@ def read_all_data_new(read_dir,outfile,statelist=None,dmalist=None,module_code=N
 		fns=[s for s in fns if module_code ==int(os.path.split(s)[1].split('_')[0])]
 
 	# this does all of the work
+	
 	df=pd.concat([read_single_file_new(fn,read_dir,statelist,dmalist,channel_filter) for fn in fns],ignore_index=True)
 
 	# some cleaning up to reduce space
