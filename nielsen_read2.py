@@ -317,11 +317,11 @@ class PanelistReader(object):
         if hh_states_keep:
             hh_df=hh_df[hh_df['fips_state_desc'].isin(hh_states_keep)]
         if hh_states_drop:
-            prod_df=prod_df[~prod_df['fips_state_desc'].isin(hh_states_drop)]
+            hh_df=hh_df[~hh_df['fips_state_desc'].isin(hh_states_drop)]
         if hh_dma_keep:
-            prod_df=prod_df[prod_df['product_module_code'].isin(hh_dma_keep)]
+            hh_df=hh_df[hh_df['dma_code'].isin(hh_dma_keep)]
         if hh_dma_drop:
-            prod_df=prod_df[~prod_df['product_module_code'].isin(hh_dma_drop)]
+            hh_df=hh_df[~hh_df['dma_code'].isin(hh_dma_drop)]
 
         trip_df=pd.merge(csv.read_csv(trip_fn,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
             hh_df[hh_keep_cols],
@@ -362,7 +362,7 @@ class PanelistReader(object):
         fn_purch= self.write_dir / (stub+'_'+'purchases.parquet')
         fn_trip= self.write_dir / (stub+'_'+'trips.parquet')
         fn_hh= self.write_dir / (stub+'_'+'households.parquet')
-        fn_hh= self.write_dir / (stub+'_'+'products.parquet')
+        fn_prods= self.write_dir / (stub+'_'+'products.parquet')
 
         self.purch_df.to_parquet(fn_purch,compression=compr)
         self.trip_df.to_parquet(fn_trip,compression=compr)
