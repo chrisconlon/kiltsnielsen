@@ -15,6 +15,43 @@ def get_group(fn):
 def get_module(fn):
 	return int(fn.name.split('_')[0])
 
+def get_yearp(fn):
+    x=re.search('(\d{4})',str(fn))
+    if x:
+        return int(x[0])
+    else:
+        return None
+
+def get_fns(my_dict):
+    for x in my_dict:
+        if 'purchases_' in str(x):
+            purch_fn=x
+        if 'trips_' in str(x):
+            trip_fn=x
+        if 'panelists_' in str(x):
+            panelist_fn=x
+    try:
+        purch_fn
+    except:
+        print(my_dict)
+        raise Exception("Could not find Purchase files")
+    try:
+        trip_fn
+    except:
+        print(trip_fn)
+        raise Exception("Could not find Trips files")
+    try:
+        panelist_fn
+    except:
+        print(panelist_fn)
+        raise Exception("Could not find Panelist files")
+    return(purch_fn,trip_fn,panelist_fn)
+
+# Constants for Panelist reader
+prod_keep_cols= ['upc','upc_ver_uc','product_module_code','product_group_code','multi','size1_code_uc','size1_amount','size1_units']
+hh_dict_rename={'Household_Cd':'household_code','Panel_Year':'panel_year','Projection_Factor':'projection_factor','Household_Income':'household_income','Fips_State_Desc':'fips_state_desc','DMA_Cd':'dma_code'}
+hh_keep_cols=['household_code','panel_year','projection_factor','household_income','fips_state_desc']
+
 
 class NielsenReader(object):	
     # Constructor
@@ -197,3 +234,139 @@ class NielsenReader(object):
     	self.read_product(upc_list=list(self.sales_df.upc.unique()))
     	self.summarize_data()
     	return
+
+class PanelistReader(object):   
+    # Constructor
+    def __init__(self, read_dir=None):
+        #self.bins = bins  # Create an instance variable
+        if read_dir:
+            self.read_dir = read_dir
+        else:
+            self.read_dir = Path.cwd()
+
+        self.file_list_master =  [x for x in self.get_file_list() if re.search('Master_Files',str(x))] 
+        self.file_list_annual =  [x for x in self.get_file_list() if re.search('Annual_Files',str(x))] 
+
+        prodlist=[x for x in self.file_list_master if x.name=='products.tsv']
+        if prodlist:
+            self.product_file = prodlist[-1]
+        else:
+            raise Exception("Could not find a valid products.tsv")
+        
+        if not self.file_list_annual:
+            raise Exception("Could not find Annual Files (purchases, trips, households)")
+
+        all_years=list(set([get_yearp(x) for x in  self.file_list_annual]))
+
+        self.annual_dict={y:[x for x in self.file_list_annual if get_yearp(x)==y] for y in all_years}
+
+        self.stores_df = pd.DataFrame()
+        self.rms_df = pd.DataFrame()
+
+        self.purch_df = pd.DataFrame()
+        self.prod_df = pd.DataFrame()
+        self.trip_df = pd.DataFrame()
+        self.hh_df = pd.DataFrame()
+        
+    def get_file_list(self):
+        return [i  for i in self.read_dir.glob('**/*.tsv')]
+
+    def filter_years(self,keep=None,drop=None):
+        def year_helper(my_dict,keep=None,drop=None):
+            if keep:
+                new_dict={k: v for k, v in my_dict.items() if k in keep}
+            if drop:
+                new_dict={k: v for k, v in my_dict.items() if k not in drop}
+            return new_dict
+        self.sales_dict = year_helper(self.annual_dict,keep,drop)
+        return
+
+    # Filter the product list by groups or modules
+    # Run this before reading in the other data
+    def read_product(self,keep_groups=None,drop_groups=None,keep_modules=None,drop_modules=None):
+
+        prod_cols=['upc', 'upc_ver_uc', 'upc_descr', 'product_module_code','product_module_descr', 'product_group_code', 'product_group_descr',
+        'brand_code_uc', 'brand_descr','multi', 'size1_code_uc', 'size1_amount', 'size1_units','dataset_found_uc', 'size1_change_flag_uc']
+
+        prod_dict={'upc':pa.int64(), 'upc_ver_uc':pa.int8(), 'product_module_code':pa.uint16(),'brand_code_uc':pa.uint32(),
+           'multi':pa.uint16(),'size1_code_uc':pa.uint16()}
+
+        prod_df=csv.read_csv(self.product_file,read_options=csv.ReadOptions(encoding='latin'), 
+                                               parse_options=csv.ParseOptions(delimiter='\t'),
+                                               convert_options=csv.ConvertOptions(column_types=prod_dict,include_columns=prod_cols)
+                                               ).to_pandas()
+        if keep_groups:
+            prod_df=prod_df[prod_df['product_group_code'].isin(keep_groups)]
+        if drop_groups:
+            prod_df=prod_df[~prod_df['product_group_code'].isin(drop_groups)]
+        if keep_modules:
+            prod_df=prod_df[prod_df['product_module_code'].isin(keep_modules)]
+        if drop_modules:
+            prod_df=prod_df[~prod_df['product_module_code'].isin(drop_modules)]
+        
+        self.prod_df = prod_df.copy()
+        return
+
+    def read_year(self,year,hh_states_keep=None,hh_states_drop=None,hh_dma_keep=None,hh_dma_drop=None):
+
+        (purch_fn,trip_fn,panelist_fn)=get_fns(self.sales_dict[year])
+
+        hh_df=csv.read_csv(panelist_fn,parse_options=csv.ParseOptions(delimiter='\t'),
+            convert_options=csv.ConvertOptions(auto_dict_encode=True,auto_dict_max_cardinality=1024)
+            ).to_pandas().rename(columns=hh_dict_rename)
+        if hh_states_keep:
+            hh_df=hh_df[hh_df['fips_state_desc'].isin(hh_states_keep)]
+        if hh_states_drop:
+            prod_df=prod_df[~prod_df['fips_state_desc'].isin(hh_states_drop)]
+        if hh_dma_keep:
+            prod_df=prod_df[prod_df['product_module_code'].isin(hh_dma_keep)]
+        if hh_dma_drop:
+            prod_df=prod_df[~prod_df['product_module_code'].isin(hh_dma_drop)]
+
+        trip_df=pd.merge(csv.read_csv(trip_fn,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
+            hh_df[hh_keep_cols],
+            on=['household_code','panel_year']
+        )
+
+        purch_df=pd.merge(pd.merge(
+            csv.read_csv(purch_fn,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
+            self.prod_df[prod_keep_cols],on=['upc','upc_ver_uc']),
+             trip_df[hh_keep_cols+['trip_code_uc','purchase_date','store_code_uc']],on=['trip_code_uc']).rename(columns={'fips_state_desc':'hh_state_desc'})
+        self.purch_df=self.purch_df.append(purch_df,ignore_index=True)
+        self.trip_df=self.trip_df.append(trip_df,ignore_index=True)
+        self.hh_df=self.hh_df.append(hh_df,ignore_index=True)
+        return
+    
+    def read_all(self,hh_states_keep=None,hh_states_drop=None,hh_dma_keep=None,hh_dma_drop=None):
+        # make sure there is a product list first
+        if self.prod_df.empty:
+            self.read_product()
+        print("Parse List:")
+        print(self.sales_dict)
+
+        for year in self.sales_dict:
+            start = time.time()
+            print("Processing Year:\t",year)
+            self.read_year(year,hh_states_keep=None,hh_states_drop=None,hh_dma_keep=None,hh_dma_drop=None)
+            end = time.time()
+            print("Time: ", end-start)
+
+    def write_data(self,write_dir=None,stub=None,compr='brotli'):
+        if not stub:
+            stub ='out'
+        if write_dir:
+            self.write_dir = write_dir
+        else:
+            self.write_dir = Path.cwd()
+
+        fn_purch= self.write_dir / (stub+'_'+'purchases.parquet')
+        fn_trip= self.write_dir / (stub+'_'+'trips.parquet')
+        fn_hh= self.write_dir / (stub+'_'+'households.parquet')
+        fn_hh= self.write_dir / (stub+'_'+'products.parquet')
+
+        self.purch_df.to_parquet(fn_purch,compression=compr)
+        self.trip_df.to_parquet(fn_trip,compression=compr)
+        self.hh_df.to_parquet(fn_hh,compression=compr)
+        self.prod_df.to_parquet(fn_prods,compression=compr)
+        
+        return 
