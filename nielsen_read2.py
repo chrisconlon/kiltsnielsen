@@ -4,6 +4,7 @@ import pyarrow as pa
 from pyarrow import csv
 import pathlib
 from pathlib import Path
+import re
 
 # Pure functions here
 def get_year(fn):
@@ -341,8 +342,10 @@ class PanelistReader(object):
         # make sure there is a product list first
         if self.prod_df.empty:
             self.read_product()
+            
         print("Parse List:")
-        print(self.sales_dict)
+        for z in sorted({x for v in self.sales_dict.values() for x in v}):
+            print(z)
 
         for year in self.sales_dict:
             start = time.time()
