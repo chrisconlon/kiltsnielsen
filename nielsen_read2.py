@@ -305,6 +305,10 @@ class PanelistReader(object):
         if drop_modules:
             prod_df=prod_df[~prod_df['product_module_code'].isin(drop_modules)]
         
+        prod_df['size1_units']=prod_df['size1_units'].astype('category')
+        prod_df['product_module_descr']=prod_df['product_module_descr'].astype('category')
+        prod_df['product_group_code']=prod_df['product_group_code'].astype('category')
+        
         self.prod_df = prod_df.copy()
         return
 
@@ -342,7 +346,7 @@ class PanelistReader(object):
         # make sure there is a product list first
         if self.prod_df.empty:
             self.read_product()
-            
+
         print("Parse List:")
         for z in sorted({x for v in self.sales_dict.values() for x in v}):
             print(z)
