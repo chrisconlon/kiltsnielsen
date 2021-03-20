@@ -341,7 +341,7 @@ class PanelistReader(object):
         self.trip_df = self.trip_df.append(trip_df, ignore_index=True)
         self.hh_df = self.hh_df.append(hh_df, ignore_index=True)
         return
-    
+
     def read_all(self, hh_states_keep=None, hh_states_drop=None, hh_dma_keep=None, hh_dma_drop=None):
         # make sure there is a product list first
         if self.prod_df.empty:
@@ -353,27 +353,26 @@ class PanelistReader(object):
 
         for year in self.sales_dict:
             start = time.time()
-            print("Processing Year:\t",year)
+            print("Processing Year:\t", year)
             self.read_year(year, hh_states_keep=hh_states_keep, hh_states_drop=hh_states_drop, hh_dma_keep=hh_dma_keep, hh_dma_drop=hh_dma_drop)
             end = time.time()
             print("Time: ", end-start)
 
-    def write_data(self,write_dir=None,stub=None,compr='brotli'):
+    def write_data(self, write_dir=None, stub=None, compr='brotli'):
         if not stub:
-            stub ='out'
+            stub = 'out'
         if write_dir:
             self.write_dir = write_dir
         else:
             self.write_dir = Path.cwd()
 
-        fn_purch= self.write_dir / (stub+'_'+'purchases.parquet')
-        fn_trip= self.write_dir / (stub+'_'+'trips.parquet')
-        fn_hh= self.write_dir / (stub+'_'+'households.parquet')
-        fn_prods= self.write_dir / (stub+'_'+'products.parquet')
+        fn_purch = self.write_dir / (stub+'_'+'purchases.parquet')
+        fn_trip = self.write_dir / (stub+'_'+'trips.parquet')
+        fn_hh = self.write_dir / (stub+'_'+'households.parquet')
+        fn_prods = self.write_dir / (stub+'_'+'products.parquet')
 
-        self.purch_df.to_parquet(fn_purch,compression=compr)
-        self.trip_df.to_parquet(fn_trip,compression=compr)
-        self.hh_df.to_parquet(fn_hh,compression=compr)
-        self.prod_df.to_parquet(fn_prods,compression=compr)
-        
+        self.purch_df.to_parquet(fn_purch, compression=compr)
+        self.trip_df.to_parquet(fn_trip, compression=compr)
+        self.hh_df.to_parquet(fn_hh, compression=compr)
+        self.prod_df.to_parquet(fn_prods, compression=compr)
         return 
