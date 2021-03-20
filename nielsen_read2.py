@@ -126,7 +126,7 @@ class NielsenReader(object):
     	self.rms_df=pa.concat_tables([csv.read_csv(fn,parse_options=csv.ParseOptions(delimiter='\t'))  for fn in self.rms_dict.values()]).to_pandas()
     	return
 
-    def read_product(self,upc_list=None):
+    def read_product(self, upc_list=None):
     	prod_df=csv.read_csv(self.product_file,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas()
     	if upc_list:
     		prod_df=prod_df[prod_df.upc.isin(upc_list)]
@@ -248,7 +248,7 @@ class PanelistReader(object):
         self.file_list_master =  [x for x in self.get_file_list() if re.search('Master_Files',str(x))] 
         self.file_list_annual =  [x for x in self.get_file_list() if re.search('Annual_Files',str(x))] 
 
-        prodlist=[x for x in self.file_list_master if x.name=='products.tsv']
+        prodlist = [x for x in self.file_list_master if x.name == 'products.tsv']
         if prodlist:
             self.product_file = prodlist[-1]
         else:
@@ -259,7 +259,7 @@ class PanelistReader(object):
 
         all_years=list(set([get_yearp(x) for x in  self.file_list_annual]))
 
-        self.annual_dict={y:[x for x in self.file_list_annual if get_yearp(x)==y] for y in all_years}
+        self.annual_dict = {y:[x for x in self.file_list_annual if get_yearp(x)==y] for y in all_years}
 
         self.stores_df = pd.DataFrame()
         self.rms_df = pd.DataFrame()
@@ -270,16 +270,16 @@ class PanelistReader(object):
         self.hh_df = pd.DataFrame()
         
     def get_file_list(self):
-        return [i  for i in self.read_dir.glob('**/*.tsv')]
+        return [i for i in self.read_dir.glob('**/*.tsv')]
 
-    def filter_years(self,keep=None,drop=None):
-        def year_helper(my_dict,keep=None,drop=None):
+    def filter_years(self, keep=None, drop=None):
+        def year_helper(my_dict, keep=None, drop=None):
             if keep:
-                new_dict={k: v for k, v in my_dict.items() if k in keep}
+                new_dict = {k: v for k, v in my_dict.items() if k in keep}
             if drop:
-                new_dict={k: v for k, v in my_dict.items() if k not in drop}
+                new_dict = {k: v for k, v in my_dict.items() if k not in drop}
             return new_dict
-        self.sales_dict = year_helper(self.annual_dict,keep,drop)
+        self.sales_dict = year_helper(self.annual_dict, keep, drop)
         return
 
     # Filter the product list by groups or modules
@@ -316,33 +316,33 @@ class PanelistReader(object):
 
         (purch_fn,trip_fn,panelist_fn)=get_fns(self.sales_dict[year])
 
-        hh_df=csv.read_csv(panelist_fn,parse_options=csv.ParseOptions(delimiter='\t'),
+        hh_df = csv.read_csv(panelist_fn,parse_options=csv.ParseOptions(delimiter='\t'),
             convert_options=csv.ConvertOptions(auto_dict_encode=True,auto_dict_max_cardinality=1024)
             ).to_pandas().rename(columns=hh_dict_rename)
         if hh_states_keep:
-            hh_df=hh_df[hh_df['fips_state_desc'].isin(hh_states_keep)]
+            hh_df = hh_df[hh_df['fips_state_desc'].isin(hh_states_keep)]
         if hh_states_drop:
-            hh_df=hh_df[~hh_df['fips_state_desc'].isin(hh_states_drop)]
+            hh_df = hh_df[~hh_df['fips_state_desc'].isin(hh_states_drop)]
         if hh_dma_keep:
-            hh_df=hh_df[hh_df['dma_code'].isin(hh_dma_keep)]
+            hh_df = hh_df[hh_df['dma_code'].isin(hh_dma_keep)]
         if hh_dma_drop:
-            hh_df=hh_df[~hh_df['dma_code'].isin(hh_dma_drop)]
+            hh_df = hh_df[~hh_df['dma_code'].isin(hh_dma_drop)]
 
-        trip_df=pd.merge(csv.read_csv(trip_fn,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
+        trip_df = pd.merge(csv.read_csv(trip_fn, parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
             hh_df[hh_keep_cols],
-            on=['household_code','panel_year']
+            on=['household_code', 'panel_year']
         )
 
-        purch_df=pd.merge(pd.merge(
-            csv.read_csv(purch_fn,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
-            self.prod_df[prod_keep_cols],on=['upc','upc_ver_uc']),
-             trip_df[hh_keep_cols+['trip_code_uc','purchase_date','store_code_uc']],on=['trip_code_uc']).rename(columns={'fips_state_desc':'hh_state_desc'})
-        self.purch_df=self.purch_df.append(purch_df,ignore_index=True)
-        self.trip_df=self.trip_df.append(trip_df,ignore_index=True)
-        self.hh_df=self.hh_df.append(hh_df,ignore_index=True)
+        purch_df = pd.merge(pd.merge(
+            csv.read_csv(purch_fn, parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
+            self.prod_df[prod_keep_cols], on=['upc','upc_ver_uc']),
+             trip_df[hh_keep_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc']).rename(columns={'fips_state_desc': 'hh_state_desc'})
+        self.purch_df = self.purch_df.append(purch_df, ignore_index=True)
+        self.trip_df = self.trip_df.append(trip_df, ignore_index=True)
+        self.hh_df = self.hh_df.append(hh_df, ignore_index=True)
         return
     
-    def read_all(self,hh_states_keep=None,hh_states_drop=None,hh_dma_keep=None,hh_dma_drop=None):
+    def read_all(self, hh_states_keep=None, hh_states_drop=None, hh_dma_keep=None, hh_dma_drop=None):
         # make sure there is a product list first
         if self.prod_df.empty:
             self.read_product()
@@ -354,7 +354,7 @@ class PanelistReader(object):
         for year in self.sales_dict:
             start = time.time()
             print("Processing Year:\t",year)
-            self.read_year(year,hh_states_keep=None,hh_states_drop=None,hh_dma_keep=None,hh_dma_drop=None)
+            self.read_year(year, hh_states_keep=hh_states_keep, hh_states_drop=hh_states_drop, hh_dma_keep=hh_dma_keep, hh_dma_drop=hh_dma_drop)
             end = time.time()
             print("Time: ", end-start)
 
