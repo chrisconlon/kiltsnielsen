@@ -309,10 +309,10 @@ class PanelistReader(object):
         prod_cols = ['upc', 'upc_ver_uc', 'upc_descr', 'product_module_code', 'product_module_descr', 'product_group_code', 'product_group_descr',
         'brand_code_uc', 'brand_descr', 'multi', 'size1_code_uc', 'size1_amount', 'size1_units', 'dataset_found_uc', 'size1_change_flag_uc']
 
-        prod_dict = {'upc': pa.int64(), 'upc_ver_uc': pa.int8(), 'product_module_code': pa.uint16(), 
+        prod_dict = {'upc': pa.int64(), 'upc_ver_uc': pa.int8(), 'product_module_code': pa.uint16(),
                      'brand_code_uc': pa.uint32(), 'multi': pa.uint16(), 'size1_code_uc': pa.uint16()}
 
-        prod_df = csv.read_csv(self.product_file,read_options=csv.ReadOptions(encoding='latin'), 
+        prod_df = csv.read_csv(self.product_file,read_options=csv.ReadOptions(encoding='latin'),
                                                parse_options=csv.ParseOptions(delimiter='\t'),
                                                convert_options=csv.ConvertOptions(column_types=prod_dict,include_columns=prod_cols)
                                                ).to_pandas()
