@@ -73,7 +73,7 @@ class NielsenReader(object):
             raise Exception("Could not find a valid products.tsv")
 
         # strip temporary stuff and get Movement files only
-        saleslist = [y for y in self.file_list if 'Movement_Files' in y.parts and '._' not in y.parts[-1]]
+        saleslist = [y for y in self.file_list if 'Movement_Files' in y.parts]
         if not saleslist:
             raise Exception("Could not find Movement Files (scanner data)")
         try:
@@ -99,7 +99,7 @@ class NielsenReader(object):
         self.prod_df = pd.DataFrame()
 
     def get_file_list(self):
-        return [i for i in self.read_dir.glob('**/*.tsv')]
+        return [i for i in self.read_dir.glob('**/*.tsv') and '._' not in i.stem]
 
     def filter_years(self, keep=None, drop=None):
         def year_helper(my_dict, keep=None, drop=None):
