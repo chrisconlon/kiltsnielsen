@@ -23,6 +23,13 @@ def get_yearp(fn):
     else:
         return None
 
+def dict_filter(d, fun, mylist, keep=True):
+    if keep:
+        d2 ={y: [x for x in d[y] if fun(x) in mylist] for y in d.keys()}
+    else:
+        d2 ={y: [x for x in d[y] if fun(x) not in mylist] for y in d.keys()}
+    return d2
+
 def get_fns(my_dict):
     for x in my_dict:
         if 'purchases_' in str(x):
@@ -117,13 +124,13 @@ class NielsenReader(object):
         if not (isinstance(keep_groups, list) & isinstance(drop_groups, list) & isinstance(keep_modules, list) & isinstance(drop_modules, list)):
             raise Exception("Filters must all be lists")
         if drop_groups:
-            self.sales_dict = {y: [x for x in self.sales_dict[y] if get_group(x) not in drop] for y in self.sales_dict.keys()}
+            self.sales_dict = dict_filter(self.sales_dict, get_group, drop_groups, keep=False)
         if keep_groups:
-            self.sales_dict = {y: [x for x in self.sales_dict[y] if get_group(x) in keep] for y in self.sales_dict.keys()}
+            self.sales_dict = dict_filter(self.sales_dict, get_group, keep_groups, keep=True)
         if drop_modules:
-            self.sales_dict = {y: [x for x in self.sales_dict[y] if get_module(x) not in drop] for y in self.sales_dict.keys()}
+            self.sales_dict = dict_filter(self.sales_dict, get_module, drop_modules, keep=False)
         if keep_modules:
-            self.sales_dict = {y: [x for x in self.sales_dict[y] if get_module(x) in keep] for y in self.sales_dict.keys()}
+            self.sales_dict = dict_filter(self.sales_dict, get_module, keep_modules, keep=True)
         return
 
     def read_rms(self):
