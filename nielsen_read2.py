@@ -113,8 +113,8 @@ class NielsenReader(object):
         self.rms_dict = year_helper(self.rms_dict, keep, drop)
         return
 
-    def filter_sales(self, keep_groups=None, drop_groups=None, keep_modules=None, drop_modules=None):
-        if not (isinstance(keep_groups, list) & isinstance(drop_groups, list)  & isinstance(keep_modules, list) & isinstance(drop_modules, list)):
+    def filter_sales(self, keep_groups=[], drop_groups=[], keep_modules=[], drop_modules=[]):
+        if not (isinstance(keep_groups, list) & isinstance(drop_groups, list) & isinstance(keep_modules, list) & isinstance(drop_modules, list)):
             raise Exception("Filters must all be lists")
         if drop_groups:
             self.sales_dict = {y: [x for x in self.sales_dict[y] if get_group(x) not in drop] for y in self.sales_dict.keys()}
