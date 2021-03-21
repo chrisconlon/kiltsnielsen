@@ -8,7 +8,7 @@ import re
 
 # Pure functions here
 def get_year(fn):
-    return int(fn.parts[-4])
+    return int(fn.stem.split('_')[-1])
 
 def get_group(fn):
     return int(fn.parts[-2].split('_')[0])
@@ -17,7 +17,7 @@ def get_module(fn):
     return int(fn.parts[-1].split('_')[0])
 
 def get_yearp(fn):
-    x=re.search('(\d{4})',str(fn))
+    x = re.search('(\d{4})',str(fn))
     if x:
         return int(x[0])
     else:
@@ -46,7 +46,7 @@ def get_fns(my_dict):
     except:
         print(panelist_fn)
         raise Exception("Could not find Panelist files")
-    return(purch_fn,trip_fn,panelist_fn)
+    return(purch_fn, trip_fn, panelist_fn)
 
 # Constants for Panelist reader
 prod_keep_cols = ['upc','upc_ver_uc','product_module_code','product_group_code','multi','size1_code_uc','size1_amount','size1_units']
@@ -84,12 +84,14 @@ class NielsenReader(object):
             [get_module(x) for x in saleslist]
         except:
             raise Exception("Could not get Module Code from Movement files")
+        try:
+            all_years = set([get_year(x) for x in saleslist])
+        except:
+            raise Exception("Could not get Year from Movement files")
 
+        self.stores_dict = {get_year(x): x for x in [y for y in self.file_list if 'stores' in y.name]}
+        self.rms_dict = {get_year(x): x for x in [y for y in self.file_list if 'rms_versions' in y.name]}
 
-        self.stores_dict = {get_year(x.name): x for x in [y for y in self.file_list if 'stores' in y.name]}
-        self.rms_dict = {get_year(x.name): x for x in [y for y in self.file_list if 'rms_versions' in y.name]}
-
-        all_years = set([get_year(x.name) for x in  saleslist])
         self.sales_dict = {y: [x for x in saleslist if get_year(x.name) == y] for y in all_years}
         self.stores_df = pd.DataFrame()
         self.rms_df = pd.DataFrame()
