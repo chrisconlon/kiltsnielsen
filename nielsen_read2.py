@@ -99,7 +99,7 @@ class NielsenReader(object):
         self.prod_df = pd.DataFrame()
 
     def get_file_list(self):
-        return [i for i in self.read_dir.glob('**/*.tsv') and '._' not in i.stem]
+        return [i for i in self.read_dir.glob('**/*.tsv') if '._' not in i.stem]
 
     def filter_years(self, keep=None, drop=None):
         def year_helper(my_dict, keep=None, drop=None):
