@@ -8,13 +8,13 @@ import re
 
 # Pure functions here
 def get_year(fn):
-    return int(fn.split('_')[-1].split('.')[0])
+    return int(fn.parts[-4])
 
 def get_group(fn):
-    return int(fn.parent.name.split('_')[0])
+    return int(fn.parts[-2].split('_')[0])
 
 def get_module(fn):
-    return int(fn.name.split('_')[0])
+    return int(fn.parts[-1].split('_')[0])
 
 def get_yearp(fn):
     x=re.search('(\d{4})',str(fn))
@@ -49,9 +49,9 @@ def get_fns(my_dict):
     return(purch_fn,trip_fn,panelist_fn)
 
 # Constants for Panelist reader
-prod_keep_cols= ['upc','upc_ver_uc','product_module_code','product_group_code','multi','size1_code_uc','size1_amount','size1_units']
-hh_dict_rename={'Household_Cd':'household_code','Panel_Year':'panel_year','Projection_Factor':'projection_factor','Household_Income':'household_income','Fips_State_Desc':'fips_state_desc','DMA_Cd':'dma_code'}
-hh_keep_cols=['household_code','panel_year','projection_factor','household_income','fips_state_desc']
+prod_keep_cols = ['upc','upc_ver_uc','product_module_code','product_group_code','multi','size1_code_uc','size1_amount','size1_units']
+hh_dict_rename = {'Household_Cd':'household_code','Panel_Year':'panel_year','Projection_Factor':'projection_factor','Household_Income':'household_income','Fips_State_Desc':'fips_state_desc','DMA_Cd':'dma_code'}
+hh_keep_cols = ['household_code','panel_year','projection_factor','household_income','fips_state_desc']
 
 
 class NielsenReader(object):    
@@ -65,13 +65,15 @@ class NielsenReader(object):
 
         self.file_list = self.get_file_list()
 
+        # take last appearance of products.tsv
         prodlist = [x for x in self.file_list if x.name == 'products.tsv']
         if prodlist:
             self.product_file = prodlist[-1]
         else:
             raise Exception("Could not find a valid products.tsv")
 
-        saleslist = [y for y in self.file_list if 'Movement_Files' in str(y)]
+        # strip temporary stuff and get Movement files only
+        saleslist = [y for y in self.file_list if 'Movement_Files' in y.parts and '._' not in y.parts[-1]]
         if not saleslist:
             raise Exception("Could not find Movement Files (scanner data)")
         try:
