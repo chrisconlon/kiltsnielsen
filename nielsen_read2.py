@@ -280,7 +280,7 @@ class PanelistReader(object):
         except:
             raise Exception("Could not get Year from Movement files")
 
-        self.annual_dict = {y: [x for x in self.file_list_annual if get_year(x) == y] for y in all_years}
+        self.annual_dict = {y: [x for x in self.file_list_annual if get_year(x)== y] for y in all_years}
 
         self.stores_df = pd.DataFrame()
         self.rms_df = pd.DataFrame()
@@ -300,7 +300,7 @@ class PanelistReader(object):
             if drop:
                 new_dict = {k: v for k, v in my_dict.items() if k not in drop}
             return new_dict
-        self.sales_dict = year_helper(self.annual_dict, keep, drop)
+        self.annual_dict = year_helper(self.annual_dict, keep, drop)
         return
 
     # Filter the product list by groups or modules
