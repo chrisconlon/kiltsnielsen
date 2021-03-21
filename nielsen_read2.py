@@ -358,6 +358,7 @@ class PanelistReader(object):
             csv.read_csv(purch_fn, parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
             self.prod_df[prod_keep_cols], on=['upc','upc_ver_uc']),
              trip_df[hh_keep_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc']).rename(columns={'fips_state_desc': 'hh_state_desc'})
+
         self.purch_df = self.purch_df.append(purch_df, ignore_index=True)
         self.trip_df = self.trip_df.append(trip_df, ignore_index=True)
         self.hh_df = self.hh_df.append(hh_df, ignore_index=True)
