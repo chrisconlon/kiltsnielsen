@@ -35,11 +35,11 @@ def dict_filter(d, fun, mylist, keep=True):
 
 def get_fns(my_dict):
     for x in my_dict:
-        if 'purchases_' in str(x):
+        if 'purchases_' in x.stem:
             purch_fn = x
-        if 'trips_' in str(x):
+        if 'trips_' in x.stem:
             trip_fn = x
-        if 'panelists_' in str(x):
+        if 'panelists_' in x.stem:
             panelist_fn = x
     try:
         purch_fn
@@ -49,12 +49,12 @@ def get_fns(my_dict):
     try:
         trip_fn
     except:
-        print(trip_fn)
+        print(my_dict)
         raise Exception("Could not find Trips files")
     try:
         panelist_fn
     except:
-        print(panelist_fn)
+        print(my_dict)
         raise Exception("Could not find Panelist files")
     return(purch_fn, trip_fn, panelist_fn)
 
