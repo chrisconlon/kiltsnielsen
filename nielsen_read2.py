@@ -92,7 +92,7 @@ class NielsenReader(object):
         self.stores_dict = {get_year(x): x for x in [y for y in self.file_list if 'stores' in y.name]}
         self.rms_dict = {get_year(x): x for x in [y for y in self.file_list if 'rms_versions' in y.name]}
 
-        self.sales_dict = {y: [x for x in saleslist if get_year(x.name) == y] for y in all_years}
+        self.sales_dict = {y: [x for x in saleslist if get_year(x) == y] for y in all_years}
         self.stores_df = pd.DataFrame()
         self.rms_df = pd.DataFrame()
         self.sales_df = pd.DataFrame()
