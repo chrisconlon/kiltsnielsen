@@ -312,7 +312,7 @@ class PanelistReader(object):
         prod_dict = {'upc': pa.int64(), 'upc_ver_uc': pa.int8(), 'product_module_code': pa.uint16(), 
                      'brand_code_uc': pa.uint32(), 'multi': pa.uint16(), 'size1_code_uc': pa.uint16()}
 
-        prod_df=csv.read_csv(self.product_file,read_options=csv.ReadOptions(encoding='latin'), 
+        prod_df = csv.read_csv(self.product_file,read_options=csv.ReadOptions(encoding='latin'), 
                                                parse_options=csv.ParseOptions(delimiter='\t'),
                                                convert_options=csv.ConvertOptions(column_types=prod_dict,include_columns=prod_cols)
                                                ).to_pandas()
@@ -325,6 +325,7 @@ class PanelistReader(object):
         if drop_modules:
             prod_df = prod_df[~prod_df['product_module_code'].isin(drop_modules)]
 
+        # dictionary encoding to save space
         prod_df['size1_units'] = prod_df['size1_units'].astype('category')
         prod_df['product_module_descr'] = prod_df['product_module_descr'].astype('category')
         prod_df['product_group_code'] = prod_df['product_group_code'].astype('category')
@@ -334,7 +335,7 @@ class PanelistReader(object):
 
     def read_year(self, year, hh_states_keep=None, hh_states_drop=None, hh_dma_keep=None, hh_dma_drop=None):
 
-        (purch_fn, trip_fn, panelist_fn) = get_fns(self.sales_dict[year])
+        (purch_fn, trip_fn, panelist_fn) = get_fns(self.annual_dict[year])
 
         hh_df = csv.read_csv(panelist_fn, parse_options=csv.ParseOptions(delimiter='\t'),
             convert_options=csv.ConvertOptions(auto_dict_encode=True, auto_dict_max_cardinality=1024)
@@ -368,10 +369,10 @@ class PanelistReader(object):
             self.read_product()
 
         print("Parse List:")
-        for z in sorted({x for v in self.sales_dict.values() for x in v}):
+        for z in sorted({x for v in self.annual_dict.values() for x in v}):
             print(z)
 
-        for year in self.sales_dict:
+        for year in self.annual_dict:
             start = time.time()
             print("Processing Year:\t", year)
             self.read_year(year, hh_states_keep=hh_states_keep, hh_states_drop=hh_states_drop, hh_dma_keep=hh_dma_keep, hh_dma_drop=hh_dma_drop)
