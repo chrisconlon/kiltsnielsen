@@ -4,7 +4,6 @@ import pyarrow as pa
 from pyarrow import csv
 import pathlib
 from pathlib import Path
-import re
 
 # Pure functions here
 def get_files(my_dir):
@@ -18,13 +17,6 @@ def get_group(fn):
 
 def get_module(fn):
     return int(fn.parts[-1].split('_')[0])
-
-def get_yearp(fn):
-    x = re.search('(\d{4})', str(fn))
-    if x:
-        return int(x[0])
-    else:
-        return None
 
 def dict_filter(d, fun, mylist, keep=True):
     if keep:
