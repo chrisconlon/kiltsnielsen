@@ -5,8 +5,9 @@ from pyarrow import csv
 import pathlib
 from pathlib import Path
 
-type_dict = {'panel_year':'uint16','retailer_code':'uint16','retailer_code':'uint16','parent_code':'uint16',
-             'dma_code':'uint16','upc_ver_uc':'int8', 'store_code_uc':'uint32','feature':'int8','display':'int8'}
+type_dict = {'panel_year':'uint16','retailer_code':'uint16','parent_code':'uint16','store_code_uc':'uint32',
+             'dma_code':'uint16','upc_ver_uc':'int8', 'feature':'int8','display':'int8','store_zip3':'uint16',
+             'fips_state_code':'uint8','fips_county_code':'uint16'}
 
 # Pure functions here
 def get_files(my_dir):
@@ -148,10 +149,13 @@ class NielsenReader(object):
         # To reduce space -- update with dictionary arrays later
         store_convert={'panel_year':pa.uint16(),'dma_code':pa.uint16(), 'retailer_code':pa.uint16(),'parent_code':pa.uint16(),'store_zip3':pa.uint16(),
         'fips_county_code':pa.uint16(),'fips_state_code':pa.uint8()}
-        self.stores_df=pa.concat_tables([ \
+        tmp = pa.concat_tables([ \
             csv.read_csv(x,parse_options=csv.ParseOptions(delimiter='\t'), convert_options=csv.ConvertOptions(column_types=store_convert)) \
             for x in self.stores_dict.values() \
             ]).to_pandas()
+        tmp['retailer_code'].fillna(0, inplace=True)
+        my_dict = {key:value for (key,value) in type_dict.items() if key  in tmp.columns}
+        tmp.astype(my_dict)
         return
 
     def filter_stores(self, keep_dma=None, drop_dma=None, keep_states=None, drop_states=None, keep_channel=None, drop_channel=None):
@@ -228,7 +232,8 @@ class NielsenReader(object):
             if sales_promo:
                 df.feature.fillna(-1, inplace=True)
                 df.display.fillna(-1, inplace=True)
-            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'})#.astype(type_dict)
+            my_dict = {key:value for (key,value) in type_dict.items() if key  in df.columns}
+            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'}).astype(my_dict)
 
         start = time.time()
         df = pd.concat([do_one_year(y, sales_promo) for y in self.sales_dict.keys()], axis=0)
