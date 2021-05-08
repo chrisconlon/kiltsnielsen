@@ -5,6 +5,9 @@ from pyarrow import csv
 import pathlib
 from pathlib import Path
 
+type_dict = {'panel_year':'uint16','retailer_code':'uint16','retailer_code':'uint16','parent_code':'uint16',
+             'dma_code':'uint16','upc_ver_uc':'int8', 'store_code_uc':'uint32'}
+
 # Pure functions here
 def get_files(my_dir):
     return [i for i in my_dir.glob('**/*.tsv') if '._' not in i.stem]
@@ -227,15 +230,14 @@ class NielsenReader(object):
                 df.display.fillna(-1, inplace=True)
                 df['display'] = df['display'].astype('int8')
                 df['feature'] = df['feature'].astype('int8')
-            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'})
+            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'}).astype(type_dict)
 
         start = time.time()
         df = pd.concat([do_one_year(y, sales_promo) for y in self.sales_dict.keys()], axis=0)
 
         # Read in and merge the RMS data
         self.read_rms()
-        # self.sales_df=do_cleaning(df,sales_promo)
-        self.sales_df = pd.merge(do_cleaning(df, sales_promo), self.rms_df, on=['upc', 'panel_year'])
+        self.sales_df = pd.merge(do_cleaning(df, sales_promo), self.rms_df, on=['upc', 'panel_year']).reset_index(drop=True)
         end = time.time()
         print("Total Time ", end-start, " seconds.")
 
