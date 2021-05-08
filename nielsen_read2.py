@@ -146,16 +146,23 @@ class NielsenReader(object):
         return
 
     def read_stores(self):
+        s_cols = ['retailer_code','parent_code','fips_state_code','fips_county_code','dma_code','store_zip3']
         # To reduce space -- update with dictionary arrays later
-        store_convert={'panel_year':pa.uint16(),'dma_code':pa.uint16(), 'retailer_code':pa.uint16(),'parent_code':pa.uint16(),'store_zip3':pa.uint16(),
-        'fips_county_code':pa.uint16(),'fips_state_code':pa.uint8()}
+        store_convert={'year': pa.uint16(),'dma_code': pa.uint16(), 'retailer_code': pa.uint16(), 'parent_code': pa.uint16(),
+                       'store_zip3':pa.uint16(), 'fips_county_code':pa.uint16(),'fips_state_code':pa.uint8()}
+
+        # Use pyarrow to read CSVs and parse using the dict -- we have to fix some types again later.
         tmp = pa.concat_tables([ \
             csv.read_csv(x,parse_options=csv.ParseOptions(delimiter='\t'), convert_options=csv.ConvertOptions(column_types=store_convert)) \
             for x in self.stores_dict.values() \
             ]).to_pandas()
-        tmp['retailer_code'].fillna(0, inplace=True)
+
+        # some columns have blanks --fill with zero to avoid converting to floats(!)
+        tmp.loc[:,s_cols] = tmp.loc[:,s_cols].fillna(0)
+
+        # use the compressed types
         my_dict = {key:value for (key,value) in type_dict.items() if key  in tmp.columns}
-        tmp.astype(my_dict)
+        self.stores_df = tmp.astype(my_dict)
         return
 
     def filter_stores(self, keep_dma=None, drop_dma=None, keep_states=None, drop_states=None, keep_channel=None, drop_channel=None):
