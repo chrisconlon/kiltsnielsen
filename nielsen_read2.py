@@ -105,6 +105,7 @@ class NielsenReader(object):
         self.rms_df = pd.DataFrame()
         self.sales_df = pd.DataFrame()
         self.prod_df = pd.DataFrame()
+        return
 
     def get_file_list(self):
         return(get_files(self.read_dir))
@@ -183,11 +184,13 @@ class NielsenReader(object):
             stores_df = stores_df[~stores_df.dma_code.isin(drop_dma)]
         print("Filtered Store-Year Count:", len(stores_df))
         self.stores_df = stores_df
+        return
 
     def summarize_data(self):
         print("Sales Rows:\t",len(self.sales_df))
         print("Product Rows:\t",len(self.prod_df))
         print("Stores Rows:\t",len(self.stores_df))
+        return
 
     def write_data(self,write_dir=None,stub=None,compr='brotli'):
         if not stub:
@@ -204,6 +207,7 @@ class NielsenReader(object):
         self.stores_df.to_parquet(fn_stores, compression=compr)
         self.prod_df.to_parquet(fn_prods, compression=compr)
         self.sales_df.to_parquet(fn_sales, compression=compr)
+        return
 
     # This does the bulk of the work
     def process_sales(self, store_cols=['retailer_code', 'dma_code'], sales_promo=True):
