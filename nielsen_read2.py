@@ -6,7 +6,7 @@ import pathlib
 from pathlib import Path
 
 type_dict = {'panel_year':'uint16','retailer_code':'uint16','retailer_code':'uint16','parent_code':'uint16',
-             'dma_code':'uint16','upc_ver_uc':'int8', 'store_code_uc':'uint32'}
+             'dma_code':'uint16','upc_ver_uc':'int8', 'store_code_uc':'uint32','feature':'int8','display':'int8'}
 
 # Pure functions here
 def get_files(my_dir):
@@ -228,9 +228,7 @@ class NielsenReader(object):
             if sales_promo:
                 df.feature.fillna(-1, inplace=True)
                 df.display.fillna(-1, inplace=True)
-                df['display'] = df['display'].astype('int8')
-                df['feature'] = df['feature'].astype('int8')
-            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'}).astype(type_dict)
+            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'})#.astype(type_dict)
 
         start = time.time()
         df = pd.concat([do_one_year(y, sales_promo) for y in self.sales_dict.keys()], axis=0)
