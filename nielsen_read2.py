@@ -27,9 +27,9 @@ def get_module(fn):
 
 def dict_filter(d, fun, mylist, keep=True):
     if keep:
-        d2 ={y: [val for val in d[y] if fun(val) in mylist] for y in d.keys()}
+        d2 = {y: [val for val in d[y] if fun(val) in mylist] for y in d.keys()}
     else:
-        d2 ={y: [val for val in d[y] if fun(val) not in mylist] for y in d.keys()}
+        d2 = {y: [val for val in d[y] if fun(val) not in mylist] for y in d.keys()}
     return d2
 
 def get_fns(my_dict):
