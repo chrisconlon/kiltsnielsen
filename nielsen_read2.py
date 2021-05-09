@@ -58,11 +58,9 @@ def get_fns(my_dict):
     return(purch_fn, trip_fn, panelist_fn)
 
 # Constants for Panelist reader
-prod_keep_cols = ['upc', 'upc_ver_uc', 'product_module_code', 'product_group_code', 'multi', 'size1_code_uc', 'size1_amount', 'size1_units']
 hh_dict_rename = {'Household_Cd': 'household_code', 'Panel_Year': 'panel_year',
                   'Projection_Factor': 'projection_factor', 'Household_Income': 'household_income',
                   'Fips_State_Desc': 'fips_state_desc', 'DMA_Cd': 'dma_code'}
-hh_keep_cols = ['household_code', 'panel_year', 'projection_factor', 'household_income', 'fips_state_desc']
 
 
 class NielsenReader(object):    
@@ -314,6 +312,9 @@ class PanelistReader(object):
         self.trip_df = pd.DataFrame()
         self.hh_df = pd.DataFrame()
 
+        self.hh_cols = []
+        self.prod_cols = []
+
     def get_file_list(self):
         return get_files(self.read_dir)
 
@@ -325,6 +326,23 @@ class PanelistReader(object):
                 new_dict = {k: v for k, v in my_dict.items() if k not in drop}
             return new_dict
         self.annual_dict = year_helper(self.annual_dict, keep, drop)
+        return
+
+    # make sure we add keys to user supplied columns
+    def set_prod_cols(self, prod_cols=None):
+        if prod_cols:
+            self.prod_cols = list(set(prod_cols).union(set(['upc', 'upc_ver_uc'])))
+        else:
+            self.prod_cols = ['upc', 'upc_ver_uc', 'product_module_code', 'product_group_code',
+                              'multi', 'size1_code_uc', 'size1_amount', 'size1_units']
+        return
+
+    # make sure we add keys to user supplied columns
+    def set_hh_cols(self, hh_cols=None):
+        if prod_cols:
+            self.hh_cols = list(set(hh_cols).union(set(['household_code', 'panel_year'])))
+        else:
+            self.hh_cols = ['household_code', 'panel_year', 'projection_factor', 'household_income', 'fips_state_desc']
         return
 
     # Filter the product list by groups or modules
@@ -363,47 +381,67 @@ class PanelistReader(object):
 
         (purch_fn, trip_fn, panelist_fn) = get_fns(self.annual_dict[year])
 
-        hh_tab = ds.dataset(csv.read_csv(panelist_fn, parse_options=csv.ParseOptions(delimiter='\t'),
-            convert_options=csv.ConvertOptions(auto_dict_encode=True, auto_dict_max_cardinality=1024)
-            ))#.to_pandas().rename(columns=hh_dict_rename)
+        hh_ds = ds.dataset(csv.read_csv(panelist_fn, parse_options=csv.ParseOptions(delimiter='\t'),
+            convert_options=csv.ConvertOptions(auto_dict_encode=True, auto_dict_max_cardinality=1024)))
+
+        # build an arrow dataset filter object one by one
+        my_filter = (ds.field('Projection_Factor') > 0)
         if hh_states_keep:
-            hh_df = hh_df[hh_df['fips_state_desc'].isin(hh_states_keep)]
+            my_filter = my_filter & (ds.field('Fips_State_Desc').isin(hh_states_keep))
         if hh_states_drop:
-            hh_df = hh_df[~hh_df['fips_state_desc'].isin(hh_states_drop)]
+            my_filter = my_filter & (~ds.field('Fips_State_Desc').isin(hh_states_drop))
         if hh_dma_keep:
-            hh_df = hh_df[hh_df['dma_code'].isin(hh_dma_keep)]
+            my_filter = my_filter & (ds.field('DMA_Cd').isin(hh_dma_keep))
         if hh_dma_drop:
-            hh_df = hh_df[~hh_df['dma_code'].isin(hh_dma_drop)]
+            my_filter = my_filter & (~ds.field('DMA_Cd').isin(hh_dma_drop))
 
-        trip_df = pd.merge(csv.read_csv(trip_fn, parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
-            hh_df[hh_keep_cols],
-            on=['household_code', 'panel_year']
-        )
+        # convert to pandas and get unique HH list
+        hh_df = hh_ds.to_table(filter=my_filter).to_pandas().rename(columns=hh_dict_rename)
+        hh_list = hh_df.household_code.unique()
 
-        purch_df = pd.merge(pd.merge(
-            csv.read_csv(purch_fn, parse_options=csv.ParseOptions(delimiter='\t')).to_pandas(),
-            self.prod_df[prod_keep_cols], on=['upc','upc_ver_uc']),
-             trip_df[hh_keep_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc']).rename(columns={'fips_state_desc': 'hh_state_desc'})
+        # use pyarrrow filter to filter trips for just our households
+        trip_df = ds.dataset(csv.read_csv(trip_fn, parse_options=csv.ParseOptions(delimiter='\t')))\
+                  .to_table(filter=ds.field('household_code').isin(hh_list)).to_pandas()
 
-        self.purch_df = self.purch_df.append(purch_df, ignore_index=True)
-        self.trip_df = self.trip_df.append(trip_df, ignore_index=True)
+        trip_list = trip_df.trip_code_uc.unique()
+        upc_list = self.prod_df.upc.unique()
+
+        # use pyarrow to filter purchases using trips and UPCs only
+        purch_ds = ds.dataset(csv.read_csv(purch_fn, parse_options=csv.ParseOptions(delimiter='\t'),
+                convert_options=csv.ConvertOptions(auto_dict_encode=True, auto_dict_max_cardinality=1024)))
+        purch_filter = ds.field('trip_code_uc').isin(trip_list) & ds.field('upc').isin(upc_list)
+        purch_df = purch_ds.to_table(filter=purch_filter).to_pandas()
+
+        # Add the fields to the trips and purchases for convenience later
+        trip_df2 = pd.merge(trip_df, hh_df[self.hh_cols], on=on=['household_code', 'panel_year'])
+        purch_df2 = pd.merge(pd.merge(
+            purch_df, self.prod_df[self.prod_cols], on=['upc', 'upc_ver_uc']),
+            trip_df[self.hh_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc'])\
+            .rename(columns={'fips_state_desc': 'hh_state_desc'})
+
+        self.purch_df = self.purch_df.append(purch_df2, ignore_index=True)
+        self.trip_df = self.trip_df.append(trip_df2, ignore_index=True)
         self.hh_df = self.hh_df.append(hh_df, ignore_index=True)
         return
 
     def read_all(self, hh_states_keep=None, hh_states_drop=None, hh_dma_keep=None, hh_dma_drop=None):
-        # make sure there is a product list first
+        # make sure there is a product list and columns to keep, otherwise set defaults
         if self.prod_df.empty:
             self.read_product()
+        if not self.prod_cols:
+            self.set_prod_cols()
+        if not self.hh_cols:
+            self.set_hh_cols()
 
         print("Parse List:")
         for z in sorted({x for v in self.annual_dict.values() for x in v}):
             print(z)
 
         for year in self.annual_dict:
-            start = time.time()
+            start=time.time()
             print("Processing Year:\t", year)
             self.read_year(year, hh_states_keep=hh_states_keep, hh_states_drop=hh_states_drop, hh_dma_keep=hh_dma_keep, hh_dma_drop=hh_dma_drop)
-            end = time.time()
+            end=time.time()
             print("Time: ", end-start)
 
     def write_data(self, write_dir=None, stub=None, compr='brotli'):
