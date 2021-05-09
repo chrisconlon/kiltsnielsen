@@ -339,7 +339,7 @@ class PanelistReader(object):
 
     # make sure we add keys to user supplied columns
     def set_hh_cols(self, hh_cols=None):
-        if prod_cols:
+        if hh_cols:
             self.hh_cols = list(set(hh_cols).union(set(['household_code', 'panel_year'])))
         else:
             self.hh_cols = ['household_code', 'panel_year', 'projection_factor', 'household_income', 'fips_state_desc']
