@@ -1,7 +1,9 @@
 import pandas as pd
 import time
 import pyarrow as pa
+import pyarrow.dataset as ds
 from pyarrow import csv
+
 import pathlib
 from pathlib import Path
 
@@ -136,7 +138,9 @@ class NielsenReader(object):
         return
 
     def read_rms(self):
-        self.rms_df = pa.concat_tables([csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t')) for fn in self.rms_dict.values()]).to_pandas()
+        self.rms_df = pa.concat_tables([csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t'),\
+            convert_options=csv.ConvertOptions(column_types={'upc':pa.int64(), 'upc_ver_uc':pa.uint8()})\
+            ) for fn in self.rms_dict.values()]).to_pandas()
         return
 
     def read_product(self, upc_list=None):
@@ -156,7 +160,7 @@ class NielsenReader(object):
         tmp = pa.concat_tables([ \
             csv.read_csv(x,parse_options=csv.ParseOptions(delimiter='\t'), convert_options=csv.ConvertOptions(column_types=store_convert)) \
             for x in self.stores_dict.values() \
-            ]).to_pandas()
+            ]).to_pandas().rename(columns={'year':'panel_year'})
 
         # some columns have blanks --fill with zero to avoid converting to floats(!)
         tmp.loc[:,s_cols] = tmp.loc[:,s_cols].fillna(0)
@@ -210,48 +214,61 @@ class NielsenReader(object):
         return
 
     # This does the bulk of the work
+    # Notice that everything is nested inside here
     def process_sales(self, store_cols=['retailer_code', 'dma_code'], sales_promo=True):
         if len(self.stores_df) == 0:
             self.read_stores()
-        stores = self.stores_df[['store_code_uc', 'year']+store_cols]
 
-        def read_sales_list(my_list, incl_promo=True):
-            return pa.concat_tables([read_one_sales(x,incl_promo=incl_promo) for x in my_list]).to_pandas()
-
-        def read_one_sales(fn, incl_promo=True):
+        # returns a pyarrow table filtered by stores_list
+        def read_one_sales(fn, stores_list=None, incl_promo=True):
             my_cols = ['store_code_uc','upc','week_end','units','prmult','price']
             if incl_promo:
                 my_cols = my_cols + ['feature', 'display']
-            convert_dict = {'feature': pa.int8(), 'display': pa.int8(), 'prmult': pa.int8(), 'units': pa.uint16()}
-            return csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t'),
-                convert_options=csv.ConvertOptions(column_types=convert_dict, include_columns=my_cols))
+            convert_dict = {'feature': pa.int8(), 'display': pa.int8(), 'prmult': pa.int8(), 'units': pa.uint16(),'store_code_uc':pa.uint32()}
+            dataset = ds.dataset(csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t'),
+                convert_options=csv.ConvertOptions(column_types=convert_dict, include_columns=my_cols)))
+            if stores_list is None:
+                return dataset.to_table()
+            else:
+                return dataset.to_table(filter=ds.field('store_code_uc').isin(stores_list))
 
+        # returns a py_arrow table (filterd by self.stores_df)
         def do_one_year(y, sales_promo=True):
             start = time.time()
             print("Processing Year:\t",y)
-            tmp = pd.merge(stores[stores.year == y], read_sales_list(self.sales_dict[y], incl_promo=sales_promo), on=['store_code_uc'])
+            stores_list = self.stores_df[self.stores_df.panel_year==y].store_code_uc.unique()
+            out = pa.concat_tables([read_one_sales(f, stores_list, incl_promo=sales_promo) for f in self.sales_dict[y]])
             end = time.time()
             print("in ", end-start, " seconds.")
-            return tmp
+            return out
 
-        def do_cleaning(df, sales_promo=True):
+        # fix dates and types
+        def do_cleaning(df):
             # fix 2 for $5.00 as $2.50
             df.loc[df.prmult > 1, 'price'] = df.loc[df.prmult > 1, 'price']/df.loc[df.prmult > 1, 'prmult']
             date_dict = {x: pd.to_datetime(x, format='%Y%m%d') for x in df.week_end.unique()}
             df['week_end'] = df['week_end'].map(date_dict)
-
-            if sales_promo:
+            df['panel_year'] = df['week_end'].dt.year.astype('uint16')
+            if 'feature' in df.columns:
                 df.feature.fillna(-1, inplace=True)
                 df.display.fillna(-1, inplace=True)
+            # re-cast the datatypes in case something went wrong
             my_dict = {key:value for (key,value) in type_dict.items() if key  in df.columns}
-            return df.drop(columns=['prmult']).rename(columns={'year': 'panel_year'}).astype(my_dict)
+            return df.drop(columns=['prmult']).astype(my_dict)
 
         start = time.time()
-        df = pd.concat([do_one_year(y, sales_promo) for y in self.sales_dict.keys()], axis=0)
+        df = pa.concat_tables([do_one_year(y, sales_promo) for y in self.sales_dict.keys()]).to_pandas()
+        self.sales_df  = df
 
         # Read in and merge the RMS data
         self.read_rms()
-        self.sales_df = pd.merge(do_cleaning(df, sales_promo), self.rms_df, on=['upc', 'panel_year']).reset_index(drop=True)
+
+        # merge the sales with the upc_ver_uc from RMS and store/geography info
+        self.sales_df = pd.merge(pd.merge(
+            do_cleaning(df),\
+            self.rms_df, on=['upc', 'panel_year']),\
+            self.stores_df[['store_code_uc', 'panel_year']+store_cols], on=['store_code_uc','panel_year'])\
+            .reset_index(drop=True)
         end = time.time()
         print("Total Time ", end-start, " seconds.")
 
