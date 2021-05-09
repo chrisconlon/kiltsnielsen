@@ -60,7 +60,7 @@ def get_fns(my_dict):
 # Constants for Panelist reader
 hh_dict_rename = {'Household_Cd': 'household_code', 'Panel_Year': 'panel_year',
                   'Projection_Factor': 'projection_factor', 'Household_Income': 'household_income',
-                  'Fips_State_Desc': 'fips_state_desc', 'DMA_Cd': 'dma_code'}
+                  'Fips_State_Desc': 'hh_fips_state_desc', 'DMA_Cd': 'hh_dma_code'}
 
 
 class NielsenReader(object):    
@@ -342,7 +342,7 @@ class PanelistReader(object):
         if hh_cols:
             self.hh_cols = list(set(hh_cols).union(set(['household_code', 'panel_year'])))
         else:
-            self.hh_cols = ['household_code', 'panel_year', 'projection_factor', 'household_income', 'fips_state_desc']
+            self.hh_cols = ['household_code', 'panel_year', 'projection_factor', 'household_income', 'hh_fips_state_desc','hh_dma_code']
         return
 
     # Filter the product list by groups or modules
@@ -394,7 +394,7 @@ class PanelistReader(object):
             my_filter = my_filter & (ds.field('DMA_Cd').isin(hh_dma_keep))
         if hh_dma_drop:
             my_filter = my_filter & (~ds.field('DMA_Cd').isin(hh_dma_drop))
-            
+
         # convert to pandas and get unique HH list
         hh_df = hh_ds.to_table(filter=my_filter).to_pandas().rename(columns=hh_dict_rename)
         hh_list = hh_df.household_code.unique()
@@ -439,10 +439,10 @@ class PanelistReader(object):
             print(z)
 
         for year in self.annual_dict:
-            start=time.time()
+            start = time.time()
             print("Processing Year:\t", year)
             self.read_year(year, hh_states_keep=hh_states_keep, hh_states_drop=hh_states_drop, hh_dma_keep=hh_dma_keep, hh_dma_drop=hh_dma_drop)
-            end=time.time()
+            end = time.time()
             print("Time: ", end-start)
 
     def write_data(self, write_dir=None, stub=None, compr='brotli'):
