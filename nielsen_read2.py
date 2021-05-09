@@ -9,7 +9,7 @@ from pathlib import Path
 
 type_dict = {'panel_year': 'uint16', 'retailer_code': 'uint16', 'parent_code': 'uint16',
              'store_code_uc': 'uint32', 'dma_code': 'uint16', 'upc_ver_uc': 'int8',
-             'feature': 'int8' 'display': 'int8', 'store_zip3': 'uint16',
+             'feature': 'int8', 'display': 'int8', 'store_zip3': 'uint16',
              'fips_state_code': 'uint8', 'fips_county_code': 'uint16'}
 
 # Pure functions here
@@ -340,7 +340,7 @@ class PanelistReader(object):
 
         prod_df = csv.read_csv(self.product_file, read_options=csv.ReadOptions(encoding='latin'),
                                                parse_options=csv.ParseOptions(delimiter='\t'),
-                                               convert_options=csv.ConvertOptions(column_types=prod_dict,include_columns=prod_cols)
+                                               convert_options=csv.ConvertOptions(column_types=prod_dict, include_columns=prod_cols)
                                                ).to_pandas()
         if keep_groups:
             prod_df = prod_df[prod_df['product_group_code'].isin(keep_groups)]
@@ -363,9 +363,9 @@ class PanelistReader(object):
 
         (purch_fn, trip_fn, panelist_fn) = get_fns(self.annual_dict[year])
 
-        hh_df = csv.read_csv(panelist_fn, parse_options=csv.ParseOptions(delimiter='\t'),
+        hh_tab = ds.dataset(csv.read_csv(panelist_fn, parse_options=csv.ParseOptions(delimiter='\t'),
             convert_options=csv.ConvertOptions(auto_dict_encode=True, auto_dict_max_cardinality=1024)
-            ).to_pandas().rename(columns=hh_dict_rename)
+            ))#.to_pandas().rename(columns=hh_dict_rename)
         if hh_states_keep:
             hh_df = hh_df[hh_df['fips_state_desc'].isin(hh_states_keep)]
         if hh_states_drop:
