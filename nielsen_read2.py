@@ -191,14 +191,14 @@ class NielsenReader(object):
         return
 
     def summarize_data(self):
-        print("Sales Rows:\t",len(self.sales_df))
-        print("Product Rows:\t",len(self.prod_df))
-        print("Stores Rows:\t",len(self.stores_df))
+        print("Sales Rows:\t", len(self.sales_df))
+        print("Product Rows:\t", len(self.prod_df))
+        print("Stores Rows:\t", len(self.stores_df))
         return
 
-    def write_data(self,write_dir=None,stub=None,compr='brotli'):
+    def write_data(self, write_dir=None,stub=None,compr='brotli'):
         if not stub:
-            stub ='out'
+            stub = 'out'
         if write_dir:
             self.write_dir = write_dir
         else:
@@ -221,10 +221,10 @@ class NielsenReader(object):
 
         # returns a pyarrow table filtered by stores_list
         def read_one_sales(fn, stores_list=None, incl_promo=True):
-            my_cols = ['store_code_uc','upc','week_end','units','prmult','price']
+            my_cols = ['store_code_uc', 'upc', 'week_end', 'units', 'prmult', 'price']
             if incl_promo:
                 my_cols = my_cols + ['feature', 'display']
-            convert_dict = {'feature': pa.int8(), 'display': pa.int8(), 'prmult': pa.int8(), 'units': pa.uint16(),'store_code_uc':pa.uint32()}
+            convert_dict = {'feature': pa.int8(), 'display': pa.int8(), 'prmult': pa.int8(), 'units': pa.uint16(), 'store_code_uc': pa.uint32()}
             dataset = ds.dataset(csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t'),
                 convert_options=csv.ConvertOptions(column_types=convert_dict, include_columns=my_cols)))
             if stores_list is None:
@@ -235,8 +235,8 @@ class NielsenReader(object):
         # returns a py_arrow table (filterd by self.stores_df)
         def do_one_year(y, sales_promo=True):
             start = time.time()
-            print("Processing Year:\t",y)
-            stores_list = self.stores_df[self.stores_df.panel_year==y].store_code_uc.unique()
+            print("Processing Year:\t", y)
+            stores_list = self.stores_df[self.stores_df.panel_year == y].store_code_uc.unique()
             out = pa.concat_tables([read_one_sales(f, stores_list, incl_promo=sales_promo) for f in self.sales_dict[y]])
             end = time.time()
             print("in ", end-start, " seconds.")
@@ -253,21 +253,20 @@ class NielsenReader(object):
                 df.feature.fillna(-1, inplace=True)
                 df.display.fillna(-1, inplace=True)
             # re-cast the datatypes in case something went wrong
-            my_dict = {key:value for (key,value) in type_dict.items() if key  in df.columns}
+            my_dict = {key: value for (key, value) in type_dict.items() if key in df.columns}
             return df.drop(columns=['prmult']).astype(my_dict)
 
         start = time.time()
         df = pa.concat_tables([do_one_year(y, sales_promo) for y in self.sales_dict.keys()]).to_pandas()
-        self.sales_df  = df
 
-        # Read in and merge the RMS data
+        # Read in and merge the RMS data for upc_ver_uc
         self.read_rms()
 
         # merge the sales with the upc_ver_uc from RMS and store/geography info
         self.sales_df = pd.merge(pd.merge(
-            do_cleaning(df),\
-            self.rms_df, on=['upc', 'panel_year']),\
-            self.stores_df[['store_code_uc', 'panel_year']+store_cols], on=['store_code_uc','panel_year'])\
+            do_cleaning(df),
+            self.rms_df, on=['upc', 'panel_year']),
+            self.stores_df[['store_code_uc', 'panel_year']+store_cols], on=['store_code_uc', 'panel_year'])\
             .reset_index(drop=True)
         end = time.time()
         print("Total Time ", end-start, " seconds.")
@@ -331,13 +330,15 @@ class PanelistReader(object):
     # Filter the product list by groups or modules
     # Run this before reading in the other data
     def read_product(self, keep_groups=None, drop_groups=None, keep_modules=None, drop_modules=None):
-        prod_cols = ['upc', 'upc_ver_uc', 'upc_descr', 'product_module_code', 'product_module_descr', 'product_group_code', 'product_group_descr',
-        'brand_code_uc', 'brand_descr', 'multi', 'size1_code_uc', 'size1_amount', 'size1_units', 'dataset_found_uc', 'size1_change_flag_uc']
+        prod_cols = ['upc', 'upc_ver_uc', 'upc_descr', 'product_module_code', 'product_module_descr',
+                     'product_group_code', 'product_group_descr', 'brand_code_uc',
+                     'brand_descr', 'multi', 'size1_code_uc', 'size1_amount',
+                     'size1_units', 'dataset_found_uc', 'size1_change_flag_uc']
 
         prod_dict = {'upc': pa.int64(), 'upc_ver_uc': pa.int8(), 'product_module_code': pa.uint16(),
                      'brand_code_uc': pa.uint32(), 'multi': pa.uint16(), 'size1_code_uc': pa.uint16()}
 
-        prod_df = csv.read_csv(self.product_file,read_options=csv.ReadOptions(encoding='latin'),
+        prod_df = csv.read_csv(self.product_file, read_options=csv.ReadOptions(encoding='latin'),
                                                parse_options=csv.ParseOptions(delimiter='\t'),
                                                convert_options=csv.ConvertOptions(column_types=prod_dict,include_columns=prod_cols)
                                                ).to_pandas()
