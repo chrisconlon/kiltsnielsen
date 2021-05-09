@@ -7,9 +7,10 @@ from pyarrow import csv
 import pathlib
 from pathlib import Path
 
-type_dict = {'panel_year':'uint16','retailer_code':'uint16','parent_code':'uint16','store_code_uc':'uint32',
-             'dma_code':'uint16','upc_ver_uc':'int8', 'feature':'int8','display':'int8','store_zip3':'uint16',
-             'fips_state_code':'uint8','fips_county_code':'uint16'}
+type_dict = {'panel_year': 'uint16', 'retailer_code': 'uint16', 'parent_code': 'uint16',
+             'store_code_uc': 'uint32', 'dma_code': 'uint16', 'upc_ver_uc': 'int8',
+             'feature': 'int8' 'display': 'int8', 'store_zip3': 'uint16',
+             'fips_state_code': 'uint8', 'fips_county_code': 'uint16'}
 
 # Pure functions here
 def get_files(my_dir):
@@ -67,7 +68,6 @@ hh_keep_cols = ['household_code', 'panel_year', 'projection_factor', 'household_
 class NielsenReader(object):    
     # Constructor
     def __init__(self, read_dir=None):
-        #self.bins = bins  # Create an instance variable
         if read_dir:
             self.read_dir = read_dir
         else:
@@ -138,8 +138,8 @@ class NielsenReader(object):
         return
 
     def read_rms(self):
-        self.rms_df = pa.concat_tables([csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t'),\
-            convert_options=csv.ConvertOptions(column_types={'upc':pa.int64(), 'upc_ver_uc':pa.uint8()})\
+        self.rms_df = pa.concat_tables([csv.read_csv(fn, parse_options=csv.ParseOptions(delimiter='\t'),
+            convert_options=csv.ConvertOptions(column_types={'upc': pa.int64(), 'upc_ver_uc': pa.uint8()})
             ) for fn in self.rms_dict.values()]).to_pandas()
         return
 
@@ -151,22 +151,22 @@ class NielsenReader(object):
         return
 
     def read_stores(self):
-        s_cols = ['retailer_code','parent_code','fips_state_code','fips_county_code','dma_code','store_zip3']
+        s_cols = ['retailer_code', 'parent_code', 'fips_state_code', 'fips_county_code', 'dma_code', 'store_zip3']
         # To reduce space -- update with dictionary arrays later
-        store_convert={'year': pa.uint16(),'dma_code': pa.uint16(), 'retailer_code': pa.uint16(), 'parent_code': pa.uint16(),
-                       'store_zip3':pa.uint16(), 'fips_county_code':pa.uint16(),'fips_state_code':pa.uint8()}
+        store_convert = {'year': pa.uint16(), 'dma_code': pa.uint16(), 'retailer_code': pa.uint16(), 'parent_code': pa.uint16(),
+                         'store_zip3': pa.uint16(), 'fips_county_code': pa.uint16(), 'fips_state_code': pa.uint8()}
 
         # Use pyarrow to read CSVs and parse using the dict -- we have to fix some types again later.
-        tmp = pa.concat_tables([ \
-            csv.read_csv(x,parse_options=csv.ParseOptions(delimiter='\t'), convert_options=csv.ConvertOptions(column_types=store_convert)) \
-            for x in self.stores_dict.values() \
-            ]).to_pandas().rename(columns={'year':'panel_year'})
+        tmp = pa.concat_tables(
+            [csv.read_csv(x, parse_options=csv.ParseOptions(delimiter='\t'),
+                convert_options=csv.ConvertOptions(column_types=store_convert))
+            for x in self.stores_dict.values()]).to_pandas().rename(columns={'year': 'panel_year'})
 
         # some columns have blanks --fill with zero to avoid converting to floats(!)
-        tmp.loc[:,s_cols] = tmp.loc[:,s_cols].fillna(0)
+        tmp.loc[:, s_cols] = tmp.loc[:, s_cols].fillna(0)
 
         # use the compressed types
-        my_dict = {key:value for (key,value) in type_dict.items() if key  in tmp.columns}
+        my_dict = {key: value for (key, value) in type_dict.items() if key in tmp.columns}
         self.stores_df = tmp.astype(my_dict)
         return
 
