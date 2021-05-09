@@ -394,10 +394,7 @@ class PanelistReader(object):
             my_filter = my_filter & (ds.field('DMA_Cd').isin(hh_dma_keep))
         if hh_dma_drop:
             my_filter = my_filter & (~ds.field('DMA_Cd').isin(hh_dma_drop))
-
-        print(hh_ds.to_table())
-        print(my_filter)
-
+            
         # convert to pandas and get unique HH list
         hh_df = hh_ds.to_table(filter=my_filter).to_pandas().rename(columns=hh_dict_rename)
         hh_list = hh_df.household_code.unique()
