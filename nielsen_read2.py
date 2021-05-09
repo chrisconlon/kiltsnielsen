@@ -385,7 +385,7 @@ class PanelistReader(object):
             convert_options=csv.ConvertOptions(auto_dict_encode=True, auto_dict_max_cardinality=1024)))
 
         # build an arrow dataset filter object one by one
-        my_filter = (ds.field('Projection_Factor') > 0)
+        my_filter = ds.field('Projection_Factor') > 0
         if hh_states_keep:
             my_filter = my_filter & (ds.field('Fips_State_Desc').isin(hh_states_keep))
         if hh_states_drop:
@@ -417,7 +417,7 @@ class PanelistReader(object):
         purch_df2 = pd.merge(pd.merge(
             purch_df,
             self.prod_df[self.prod_cols], on=['upc', 'upc_ver_uc']),
-            trip_df[self.hh_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc'])\
+            trip_df2[self.hh_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc'])\
             .rename(columns={'fips_state_desc': 'hh_state_desc'})
 
         self.purch_df = self.purch_df.append(purch_df2, ignore_index=True)
