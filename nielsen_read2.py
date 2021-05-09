@@ -413,9 +413,10 @@ class PanelistReader(object):
         purch_df = purch_ds.to_table(filter=purch_filter).to_pandas()
 
         # Add the fields to the trips and purchases for convenience later
-        trip_df2 = pd.merge(trip_df, hh_df[self.hh_cols], on=on=['household_code', 'panel_year'])
+        trip_df2 = pd.merge(trip_df, hh_df[self.hh_cols], on=['household_code', 'panel_year'])
         purch_df2 = pd.merge(pd.merge(
-            purch_df, self.prod_df[self.prod_cols], on=['upc', 'upc_ver_uc']),
+            purch_df,
+            self.prod_df[self.prod_cols], on=['upc', 'upc_ver_uc']),
             trip_df[self.hh_cols+['trip_code_uc', 'purchase_date', 'store_code_uc']], on=['trip_code_uc'])\
             .rename(columns={'fips_state_desc': 'hh_state_desc'})
 
