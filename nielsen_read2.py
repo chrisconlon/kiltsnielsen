@@ -145,6 +145,11 @@ class NielsenReader(object):
         prod_df = csv.read_csv(self.product_file,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas()
         if upc_list:
             prod_df = prod_df[prod_df.upc.isin(upc_list)]
+
+        # Clean up product descriptions
+        prod_df['upc_descr'] = prod_df['upc_descr'].str.strip().str.replace('RTE', '')
+        prod_df['brand_descr'] = prod_df['brand_descr'].str.strip().str.replace('CTL BR', 'Private Label')
+
         self.prod_df = prod_df.copy()
         return
 
@@ -373,6 +378,8 @@ class PanelistReader(object):
         prod_df['size1_units'] = prod_df['size1_units'].astype('category')
         prod_df['product_module_descr'] = prod_df['product_module_descr'].astype('category')
         prod_df['product_group_code'] = prod_df['product_group_code'].astype('category')
+
+        # clean up product info
         prod_df['upc_descr'] = prod_df['upc_descr'].str.strip().str.replace('RTE', '')
         prod_df['brand_descr'] = prod_df['brand_descr'].str.strip().str.replace('CTL BR', 'Private Label')
         self.prod_df = prod_df.copy()
