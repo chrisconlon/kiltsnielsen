@@ -1,8 +1,8 @@
-import pandas as pd
 import time
 import pyarrow as pa
 import pyarrow.dataset as ds
 from pyarrow import csv
+import pandas as pd
 
 import pathlib
 from pathlib import Path
@@ -142,13 +142,14 @@ class NielsenReader(object):
         return
 
     def read_product(self, upc_list=None):
+        print("Reading product data...")
         prod_df = csv.read_csv(self.product_file,parse_options=csv.ParseOptions(delimiter='\t')).to_pandas()
         if upc_list:
             prod_df = prod_df[prod_df.upc.isin(upc_list)]
 
         # Clean up product descriptions
-        prod_df['upc_descr'] = prod_df['upc_descr'].str.strip().str.replace('RTE', '')
-        prod_df['brand_descr'] = prod_df['brand_descr'].str.strip().str.replace('CTL BR', 'Private Label')
+        #prod_df['upc_descr'] = prod_df['upc_descr'].str.strip().str.replace('RTE', '')
+        #prod_df['brand_descr'] = prod_df['brand_descr'].str.strip().str.replace('CTL BR', 'Private Label')
 
         self.prod_df = prod_df.copy()
         return
