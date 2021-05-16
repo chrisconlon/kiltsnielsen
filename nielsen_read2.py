@@ -373,7 +373,8 @@ class PanelistReader(object):
         prod_df['size1_units'] = prod_df['size1_units'].astype('category')
         prod_df['product_module_descr'] = prod_df['product_module_descr'].astype('category')
         prod_df['product_group_code'] = prod_df['product_group_code'].astype('category')
-
+        prod_df['upc_descr'] = prod_df['upc_descr'].str.strip().str.replace('RTE', '')
+        prod_df['brand_descr'] = prod_df['brand_descr'].str.strip().str.replace('CTL BR', 'Private Label')
         self.prod_df = prod_df.copy()
         return
 
