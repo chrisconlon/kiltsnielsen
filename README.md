@@ -6,8 +6,21 @@ NielsenReader defines the classes **RetailReader** and **PanelReader** to facili
 These classes are built on [Apache Arrow]:<https://arrow.apache.org>. 
 
 
+### Installation
+
+```
+pip install git+https://github.com/chrisconlon/kiltsnielsen
+```
+
+
+## Usage
+
+```
+from kiltsreader import RetailReader, PanelReader
+```
+
 The main advantage of this package is:
-	1. Speed. this is meant to be at least 10x faster than pd.read_csv() or pd.read_table()
+	1. Speed. this is meant to be at least 10x faster (and can be more than 100x faster) than pd.read_csv() or pd.read_table()
 	2. Supports partial reading (you can read in specific products, specific cities, stores, etc.) without having to load the entire file
 	3. It understands the Kilts/Nielsen directory structure -- so you can just download from Kilts and go.
 	4. It saves highly compressed (and fast) .parquet files
