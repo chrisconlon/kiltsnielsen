@@ -1,50 +1,27 @@
 # NielsenReader
 NielsenReader defines the classes **RetailReader** and **PanelReader** to facilitate easy processing of the Kilts Center's Nielsen IQ Data.
- **RetailReader** processes Retail Scanner Data
- **PanelReader** processes Consumer Panel Data
+- **RetailReader** processes Retail Scanner Data
+- **PanelReader** processes Consumer Panel Data
 
-These classes are built on [Apache Arrow]:<https://arrow.apache.org>. 
+The main advantages of this package are:
 
+1. **Speed**. this is meant to be at least 10x faster (and can be more than 100x faster) than pd.read_csv() or pd.read_table()
+2. Supports partial reading (you can read in specific products, specific cities, stores, etc.) without having to load the entire file
+3. It understands the Kilts/Nielsen directory structure -- so you can just download from Kilts and go.
+4. It saves highly compressed (and fast) .parquet files
+5. Optional support for various fixes/updates issued by Kilts.
+
+These classes are built on  `pyarrow 5.0.1` [Apache Arrow v.5][apache] which you will need to install.
 
 ### Installation
 
+To install with pip simply type:
 ```
 pip install git+https://github.com/chrisconlon/kiltsnielsen
 ```
 
+Make sure your python installation has the latest pyarrow (as well as pandas and NumPy)
 
-## Usage
-
-```
-from kiltsreader import RetailReader, PanelReader
-```
-
-The main advantage of this package is:
-	1. Speed. this is meant to be at least 10x faster (and can be more than 100x faster) than pd.read_csv() or pd.read_table()
-	2. Supports partial reading (you can read in specific products, specific cities, stores, etc.) without having to load the entire file
-	3. It understands the Kilts/Nielsen directory structure -- so you can just download from Kilts and go.
-	4. It saves highly compressed (and fast) .parquet files
-	5. Optional support for various fixes/updates issued by Kilts.
-
-
-Information about the data can be found at the [Kilts Center's Website for the Nielsen Dataset][kilts].
-
-Check with your institution to gain access to the data. Once you have gained access, download files as follows:
-
-###### Retail Scanner Data:
-1. Construct file extracts using the Kilts File Selection System. Note you must separately gain access to the File Selection System after applying for the data. 
-2. The data are available in .tgz files. Data can be downloaded by group, module, and/or year
-3. Unzip the .tgz files 
-
-###### Consumer Panel Data
-1. Panelist data can be downloaded directly from Globus. The data are small enough for a typical work machine. The data are available in .tgz files
-2.  Unzip the .tgz files.
-
-Importantly, make sure all files are unzipped and preserved in the original Nielsen structure before using the methods provided here. (Do not rearrange the directory structure.)
-
-#### To use the Reader Classes
-1. Download NielsenReader.py and Example.py
-2. Make sure your python installation has the latest pyarrow, among other typical packages
 Using pip:
 ```
 pip install pyarrow
@@ -60,18 +37,42 @@ Using conda:
 conda intall pyarrow
 conda update pyarrow
 ```
-This version was built on `pyarrow 5.0.1`
-3. Locate your Nielsen Retail Scanner and Consumer Panel data separately
-4. Open `Example.py`
-5. Replace `dir_retail` and `dir_panel` with the locations of your Retail Scanner and Consumer Panel Data respectively
-6. Replace the `KEEP_GROUPS`, `KEEP_MODULES`, `DROP_YEARS`, `KEEP_YEARS`, `KEEP_STATES`, and `KEEP_CHANNEL` with your relevant selection 
-7. Run `Example.py` to verify the code works. 
+
+## Usage
+
+```
+from kiltsreader import RetailReader, PanelReader
+```
+
+1. Locate your Nielsen Retail Scanner and Consumer Panel data separately
+2. Open `Example.py`
+3. Replace `dir_retail` and `dir_panel` with the locations of your Retail Scanner and Consumer Panel Data respectively
+4. Replace the `KEEP_GROUPS`, `KEEP_MODULES`, `DROP_YEARS`, `KEEP_YEARS`, `KEEP_STATES`, and `KEEP_CHANNEL` with your relevant selection 
+5. Run `Example.py` to verify the code works.
+
+
+## Data
+Information about the data can be found at the [Kilts Center's Website for the Nielsen Dataset][kilts].
+
+Check with your institution to gain access to the data. Once you have gained access, download files as follows:
+
+###### Retail Scanner Data:
+
+1. Construct file extracts using the Kilts File Selection System. Note you must separately gain access to the File Selection System after applying for the data. 
+2. The data are available in .tgz files. Data can be downloaded by group, module, and/or year
+3. Unzip the .tgz files 
+
+###### Consumer Panel Data
+1. Panelist data can be downloaded directly from Globus. The data are small enough for a typical work machine. The data are available in .tgz files
+2.  Unzip the .tgz files.
+
+Importantly, make sure all files are unzipped and preserved in the original Nielsen structure before using the methods provided here. (Do not rearrange the directory structure.)
 
 
 
-[kilts]:<https://www.chicagobooth.edu/research/kilts/datasets/nielsenIQ-nielsen>
+
 ## Class Descriptions
-# RetailReader
+### RetailReader
 
 **class** NielsenReader.**RetailReader**(_**dir_read**=path.Path.cwd(), **verbose**=True_)
 
@@ -95,7 +96,7 @@ RetailReader defines the class object used to read in the Nielsen Retail Scanner
 - `files_sales` (_list of pathlib Path objects_)stores names of annual sales files
 - `all_years` (_list_): list of years included in data. Updates with filtering
 
-## Available Functions in the RetailReader Class
+#### Available Functions in the RetailReader Class
 Functions also described with docstrings in the `NielsenReader.py` file
 
 **RetailReader**.**filter_years**(_**keep**=None, **drop**=None_): 
@@ -178,7 +179,7 @@ RR.write_data(dir_write, separator = {VARIABLE_NAME})
 **RetailReader.**get_group**(_file_sales=_)**: returns product group (outer category) corresponding to particular sales file. Auxiliary, not commonly used.
 - _file_sales(pathlib Path object)_: Retail Scanner sales file, e.g. 1046_2006.tsv
 
-# PanelReader
+### PanelReader
 **class** NielsenReader.*PanelReader(_**dir_read**=path.Path.cwd(), **verbose**=True_)*
 PanelReader defines the class object used to read in the Nielsen Consumer Panel data (see above)
 
@@ -204,7 +205,7 @@ PanelReader defines the class object used to read in the Nielsen Consumer Panel 
 - `files_extra` (_list of pathlib Path objects_): stores names of annual products extra files
 - `all_years` (_list_): list of years included in data. Updates with filtering
 
-## Available Functions in the RetailReader Class
+#### Available Functions in the RetailReader Class
 
 **PanelReader**.**filter_years**(_**keep**=None_, _**drop**=None_)
 Selects years for which to process annual panelist, purchase, trips, and extra files. Used in pre-processing to limit required memory if desired; otherwise later functions will process all available data. Updates `PanelReader.all_years`
@@ -294,7 +295,6 @@ Corrects the product extra and panelist data using errata provided by Nielsen fo
 
 
 
-
-
-
+[apache]:<https://arrow.apache.org>
+[kilts]:<https://www.chicagobooth.edu/research/kilts/datasets/nielsenIQ-nielsen>
 
