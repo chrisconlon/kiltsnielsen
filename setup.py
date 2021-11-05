@@ -3,10 +3,6 @@ import setuptools
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    required = fh.read()
-
-
 setuptools.setup(
     name="kiltsreader",
     version="0.0.1",
@@ -26,5 +22,6 @@ setuptools.setup(
     ],
     package_dir={"": "kiltsreader/src"},
     packages=setuptools.find_packages(where="src"),
-    python_requires=required,
+    install_requires=['pyarrow >= 5.0.0','pandas >= 1.2','numpy>= 1.2'],
+    python_requires='>=3.6',
 )
