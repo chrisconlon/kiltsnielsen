@@ -107,3 +107,8 @@ panelist_reader.py
 
 # mac junk
 .DS_Store
+
+# pip stuff
+Pipfile
+Pipfile.lock
+
