@@ -104,3 +104,6 @@ venv.bak/
 .mypy_cache/
 
 panelist_reader.py
+
+# mac junk
+.DS_Store
