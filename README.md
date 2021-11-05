@@ -1,5 +1,18 @@
 # NielsenReader
-NielsenReader defines the classes **RetailReader** and **PanelReader** to facilitate easy processing of the Kilts Center's Nielsen IQ Data. **RetailReader** processes Retail Scanner Data and **PanelReader** processes Consumer Panel Data
+NielsenReader defines the classes **RetailReader** and **PanelReader** to facilitate easy processing of the Kilts Center's Nielsen IQ Data.
+ **RetailReader** processes Retail Scanner Data
+ **PanelReader** processes Consumer Panel Data
+
+These classes are built on [Apache Arrow]:<https://arrow.apache.org>. 
+
+
+The main advantage of this package is:
+	1. Speed. this is meant to be at least 10x faster than pd.read_csv() or pd.read_table()
+	2. Supports partial reading (you can read in specific products, specific cities, stores, etc.) without having to load the entire file
+	3. It understands the Kilts/Nielsen directory structure -- so you can just download from Kilts and go.
+	4. It saves highly compressed (and fast) .parquet files
+	5. Optional support for various fixes/updates issued by Kilts.
+
 
 Information about the data can be found at the [Kilts Center's Website for the Nielsen Dataset][kilts].
 
@@ -34,7 +47,7 @@ Using conda:
 conda intall pyarrow
 conda update pyarrow
 ```
-This version was built on `pyarrow 4.0.1`
+This version was built on `pyarrow 5.0.1`
 3. Locate your Nielsen Retail Scanner and Consumer Panel data separately
 4. Open `Example.py`
 5. Replace `dir_retail` and `dir_panel` with the locations of your Retail Scanner and Consumer Panel Data respectively
