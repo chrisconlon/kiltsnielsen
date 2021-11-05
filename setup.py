@@ -3,8 +3,12 @@ import setuptools
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
+with open("requirements.txt", "r", encoding="utf-8") as fh:
+    required = fh.read()
+
+
 setuptools.setup(
-    name="kiltsreader-pkg-chrisconlon",
+    name="kiltsreader",
     version="0.0.1",
     author="Christopher Conlon and Chitra Marti",
     author_email="cconlon@stern.nyu.edu",
@@ -20,7 +24,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    package_dir={"": "src"},
+    package_dir={"": "kiltsreader/src"},
     packages=setuptools.find_packages(where="src"),
-    python_requires=">=3.6",
+    python_requires=required,
 )
