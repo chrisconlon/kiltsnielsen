@@ -20,8 +20,8 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    package_dir={"": "kiltsreader/src"},
-    packages=setuptools.find_packages(where="src"),
+    package_dir={"": "kiltsreader"},
+    packages=setuptools.find_packages(where=""),
     install_requires=['pyarrow >= 5.0.0','pandas >= 1.2','numpy>= 1.2'],
     python_requires='>=3.6',
 )
