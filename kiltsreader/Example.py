@@ -20,10 +20,10 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-# %% Import NielsenReader functions
+# %% Import kiltsreader functions
 
-# Make sure your current directory contains the NielsenReader file
-from NielsenReader import RetailReader, PanelReader
+# Make sure your current directory contains the kiltsreader file
+from kiltsreader import RetailReader, PanelReader
 
 # %% Offer an Example: Full Scanner Files
 # Important: Replace dir_retail, dir_panel with your own file locations!
@@ -127,6 +127,7 @@ PR.read_products(keep_groups = KEEP_GROUPS, keep_modules = KEEP_MODULES)
 print((PR.df_products == RR.df_products).max())
 # %% Read in Extra: should be EXACTLY as RR.read_extra above!
 PR.read_extra()
+
 # some small diferences: UPC, dosage_code apparently!
 # not checking here because this depends on the years chosen
 # extra characteristics not labeled with a year will not be included
