@@ -38,19 +38,6 @@ conda intall pyarrow
 conda update pyarrow
 ```
 
-## Usage
-
-```
-from kiltsreader import RetailReader, PanelReader
-```
-
-1. Locate your Nielsen Retail Scanner and Consumer Panel data separately
-2. Open `Example.py`
-3. Replace `dir_retail` and `dir_panel` with the locations of your Retail Scanner and Consumer Panel Data respectively
-4. Replace the `KEEP_GROUPS`, `KEEP_MODULES`, `DROP_YEARS`, `KEEP_YEARS`, `KEEP_STATES`, and `KEEP_CHANNEL` with your relevant selection 
-5. Run `Example.py` to verify the code works.
-
-
 ## Data
 Information about the data can be found at the [Kilts Center's Website for the Nielsen Dataset][kilts].
 
@@ -68,6 +55,56 @@ Check with your institution to gain access to the data. Once you have gained acc
 
 Importantly, make sure all files are unzipped and preserved in the original Nielsen structure before using the methods provided here. (Do not rearrange the directory structure.)
 
+## QuickStart
+
+This shows how we process the retail scanner data for [Backus Conlon Sinkinson (2021)][bcs] 
+
+```
+import pandas as pd
+from  kiltsreader import RetailReader
+from pathlib import Path
+
+# Read these from your nielsen directory -- change this
+cereal_dir = Path.cwd()
+
+# save your ouptut here -- change this
+save_dir = Path.cwd()
+
+# Specify which dmas /modules /columns to keep
+dmas = [506, 517, 556, 602, 751]
+cereal = 1344
+
+# supermarkets stores only (no superstores/pharmacies/etc)
+channels =['F']
+
+# read cereal -- auto-write
+rr = RetailReader(cereal_dir)
+rr.filter_years(drop=[2006, 2019])
+rr.read_stores()
+rr.filter_stores(keep_dmas=dmas, keep_channels=channels)
+rr.read_products(keep_modules=[cereal])
+rr.read_sales()
+
+# we can access the underlying data from the rr object
+# add the dma (city) and retailer_code (chain) info directly to sales data
+# then save the data in chunks by dma_code (city)
+rr.df_sales = pd.merge(rr.df_sales,
+    rr.df_stores[['store_code_uc','panel_year','dma_code']],
+    on=['store_code_uc','panel_year'])
+rr.write_data(save_dir, stub="cereal", as_table=True, separator='dma_code')
+```
+
+## Tutorial
+
+```
+from kiltsreader import RetailReader, PanelReader
+```
+
+1. Locate your Nielsen Retail Scanner and Consumer Panel data separately
+2. Open `Example.py`
+3. Replace `dir_retail` and `dir_panel` with the locations of your Retail Scanner and Consumer Panel Data respectively
+4. Replace the `KEEP_GROUPS`, `KEEP_MODULES`, `DROP_YEARS`, `KEEP_YEARS`, `KEEP_STATES`, and `KEEP_CHANNEL` with your relevant selection 
+5. Run `Example.py` to verify the code works.
 
 
 
@@ -294,6 +331,7 @@ Corrects the product extra and panelist data using errata provided by Nielsen fo
 
 
 
+[bcs]:<https://chrisconlon.github.io/site/bcs_cereal.pdf>
 
 [apache]:<https://arrow.apache.org>
 [kilts]:<https://www.chicagobooth.edu/research/kilts/datasets/nielsenIQ-nielsen>
