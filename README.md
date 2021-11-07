@@ -111,13 +111,24 @@ from kiltsreader import RetailReader, PanelReader
 ## Class Descriptions
 ### RetailReader
 
-**class** NielsenReader.**RetailReader**(_**dir_read**=path.Path.cwd(), **verbose**=True_)
+**class** **RetailReader**(_**dir\_read**=path.Path.cwd(), **verbose**=True_)
 
 RetailReader defines the class object used to read in the Nielsen Retail Scanner Data (see above)
 
 ###### Parameters:
-- **dir_read**(_pathlib Path object, optional_): points to the location of the Retail Scanner Files. Should be named ``nielsen_extract`` or something similar, containing the subfolder `RMS`. Default is the current working directory.
+- **dir\_read**(_pathlib Path object, optional_): points to the location of the Retail Scanner Files. Should be named ``nielsen_extract`` or something similar, containing the subfolder `RMS`. Default is the current working directory.
 - **verbose**(_bool_): if `True`, prints updates after processing files. Displays size of files processed. Default is True.
+
+###### Methods:
+- `filter_years()`: Selects years for which to process annual scanner data files. Used in pre-processing to limit required memory if desired; otherwise later functions will process all available data.
+- `read_products()`: Reads in the set of product characteristics (and filters them).
+- `read_stores()`:  Reads in the full stores list.
+- `filter_stores()`: filter stores by State, DMA, and channel-type. You MUST run ``read_stores()`` first.
+- `read_rms()`: the RMS data contains the `upc_ver_uc` information for re-used UPCs.
+- `read_extra()`: Populates `RetailReader.df_variations` with brand variations data, typically located in `MasterFiles/Latest/brand_variations.tsv`. Lists brand codes, descriptions, and any alternative descriptions.
+- `read_sales()`: this reads in the majority of the scanner data.
+- `write_data()`: after reading in the data, this writes the tables as `.parquet` files.
+
 
 ###### Objects:
 - `df_products` (_pandas DataFrame_): default empty, stores products data after processing
@@ -136,93 +147,115 @@ RetailReader defines the class object used to read in the Nielsen Retail Scanner
 #### Available Functions in the RetailReader Class
 Functions also described with docstrings in the `NielsenReader.py` file
 
-**RetailReader**.**filter_years**(_**keep**=None, **drop**=None_): 
+**RetailReader**.**filter\_years**(_**keep**=None, **drop**=None_): 
 Selects years for which to process annual sales files. Used in pre-processing to limit required memory if desired; otherwise later functions will process all available data. Populates `RetailReader.all_years`
-- _**keep**(list of integers, optional)_: list of years to keep, e.g. range(2004, 2013). Can only include years that are already present in the data, e.g. specifying `keep=[1999]' will result in an empty set of years
+- _**keep**(list of integers, optional)_: list of years to keep, e.g. ``range(2004, 2013)``. Can only include years that are already present in the data, e.g. specifying ``keep=[1999]`` will result in an empty set of years
 - _**drop**(list of integers, optional)_: list of years to remove, e.g. [2006, 2009, 2013]
 
-**RetailReader**.**filter_sales**(_**keep_groups**=None_, _**drop_groups**=None_, _**keep_modules**=None_, _**drop_modules**=None_): 
+**RetailReader**.**filter\_sales**(_**keep\_groups**=None_, _**drop\_groups**=None_, _**keep\_modules**=None_, _**drop\_modules**=None_): 
 Selects product groups (outer category) and product modules (inner category) for which to process annual sales files. Used in pre-processing to limit required memory if desired; otherwise later functions will process all available data.
-- _**keep_groups**(list of integers, optional)_: list of product groups to keep, e.g. `keep_groups=[1508, 1048]`
-- _**drop_groups**(list of integers, optional)_: list of product groups to exclude, e.g. `drop_groups = [1046]`. Takes precedence if there is any overlap with _keep_groups_
-- _**keep_groups**(list of integers, optional)_: list of product modules to keep, e.g. `keep_modules=[1481, 1482]`
-- _**drop_groups**(list of integers, optional)_: list of product modules to exclude, e.g. `drop_groups = [1483]`. Takes precedence if there is any overlap with _keep_module_
+- _**keep\_groups**(list of integers, optional)_: list of product groups to keep, e.g. `keep_groups=[1508, 1048]`
+- _**drop\_groups**(list of integers, optional)_: list of product groups to exclude, e.g. `drop_groups = [1046]`. Takes precedence if there is any overlap with _keep\_groups_
+- _**keep\_groups**(list of integers, optional)_: list of product modules to keep, e.g. `keep_modules=[1481, 1482]`
+- _**drop\_groups**(list of integers, optional)_: list of product modules to exclude, e.g. `drop_groups = [1483]`. Takes precedence if there is any overlap with _keep\_module_
 
-**RetailReader**.**read_rms**(): 
+**RetailReader**.**read\_rms**(): 
 Populates `RetailReader.df_rms`
 Processes the annual RMS versions files, which map reused UPCs to the appropriate version based on year
 
 
 
-**RetailReader**.**read_products**(_**upc_list**=None_, _**keep_groups**=None_, _**drop_groups**=None_, _**keep_modules**=None_, _**drop_modules**=None_): 
+**RetailReader**.**read\_products**(_**upc\_list**=None_, _**keep\_groups**=None_, _**drop\_groups**=None_, _**keep\_modules**=None_, _**drop\_modules**=None_): 
 Populates `RetailReader.df_products`.
 Reads in the set of product characteristics, typically located in `Master_Files/Latest/products.tsv`. Optionally elects product groups (outer category) and product modules (inner category) for which to process annual sales files. 
 
 Note that the function does NOT carry over the filtered set of groups and modules from `RetailReader.filter_sales()`. The `RetailReader.read_products()` function is redundant with the `PanelReader.read_products()` function, and therefore allows the user to read in the full set of products and their characteristics even while reading only a subset of sales.
-- _**upc_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
-- _**keep_groups**(list of integers, optional)_: list of product groups to keep, e.g. `keep_groups=[1508, 1048]`
-- _**drop_groups**(list of integers, optional)_: list of product groups to exclude, e.g. `drop_groups = [1046]`. Takes precedence if there is any overlap with _keep_groups_
-- _**keep_groups**(list of integers, optional)_: list of product modules to keep, e.g. `keep_modules=[1481, 1482]`
-- _**drop_groups**(list of integers, optional)_: list of product modules to exclude, e.g. `drop_groups = [1483]`. Takes precedence if there is any overlap with _keep_module_
+- _**upc\_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
+- _**keep\_groups**(list of integers, optional)_: list of product groups to keep, e.g. `keep_groups=[1508, 1048]`
+- _**drop\_groups**(list of integers, optional)_: list of product groups to exclude, e.g. `drop_groups = [1046]`. Takes precedence if there is any overlap with _keep\_groups_
+- _**keep\_groups**(list of integers, optional)_: list of product modules to keep, e.g. `keep_modules=[1481, 1482]`
+- _**drop\_groups**(list of integers, optional)_: list of product modules to exclude, e.g. `drop_groups = [1483]`. Takes precedence if there is any overlap with _keep\_module_
 
-**RetailReader**.**read_extra**(_**years**=None_, _**upc_list**=None_)
+**RetailReader**.**read\_extra**(_**years**=None_, _**upc\_list**=None_)
 Populates `RetailReader.df_extra`
 Selects annual Products Extra files for all post-filtering years. Redundant with `PanelReader.read_extra()`
 Product group and module filtering are not possible.
 Note that UPCs may be repeated for different years. Use RMS versions to select appropriate years. Differences between multiple years for a single UPC may be due not to actual product changes but rather due to Nielsen filling in previously missing data. See Nielsen documentation for an in-depth description
 
-- _**upc_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
+- _**upc\_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
 - **years**(list of integers, optional): selects years for which to. Note that previous year-filtering of the RetailReader object will carry over unless a new set of years is specified.
 
 
-**RetailReader**.**read_stores**():
+**RetailReader**.**read\_stores**():
 Populates `RetailReader.df_stores`
 Stores files are common to all product groups and modules, so processing will be unaffected by `RetailReader.filter_years` or `RetailReader.filter_sales`
 
 
-**RetailReader**.**filter_stores**(_**keep_dma**=None_, _**drop_dma**=None_, _**keep_states**=None_, _**drop_states**=None_, _**keep_channel**=None_, _**drop_dma**=None_):
+
+**RetailReader**.**filter\_stores**(_**keep\_dma**=None_, _**drop\_dma**=None_, _**keep\_states**=None_, _**drop\_states**=None_, _**keep\_channel**=None_, _**drop\_dma**=None_):
 Updates `RetailReader.df_stores`
-- _**keep_dmas**(list of integers, optional)_: list of DMAs (Designated Market Areas) to keep, e.g. `keep_dma=[801, 503]`
-- _**drop_dmas**(list of integers, optional)_: list of DMAs (Designated Market Areas) to exclude, e.g. `drop_dma=[602]`. Takes precedence if there is any overlap with _keep_dma_.
-- _**keep_states**(list of strings, optional)_: list of states to keep, with list in two-character format, e.g. `keep_states=['TX', 'CA']`
-- _**drop_states**(list of integers, optional)_: list of states to exclude, with list in two-character format, e.g. `drop_states=['NJ', 'NY']` Takes precedence if there is any overlap with _keep_states_.
-- _**keep_channels**(list of characters, optional)_: list of channels (store types) to keep, e.g. `keep_channels=['F', 'G']`. See Nielsen documentation for explanation of channels and list of options. 
-- _**drop_channels**(list of characters, optional)_: list of channels (store types) to exclude, e.g. `drop_channels = ['C']`. Takes precedence if there is any overlap with _keep_channels_. See Nielsen documentation for explanation of channels and list of options. 
+- _**keep\_dmas**(list of integers, optional)_: list of DMAs (Designated Market Areas) to keep, e.g. `keep_dma=[801, 503]`
+- _**drop\_dmas**(list of integers, optional)_: list of DMAs (Designated Market Areas) to exclude, e.g. `drop_dma=[602]`. Takes precedence if there is any overlap with _keep_dma_.
+- _**keep\_states**(list of strings, optional)_: list of states to keep, with list in two-character format, e.g. `keep_states=['TX', 'CA']`
+- _**drop\_states**(list of integers, optional)_: list of states to exclude, with list in two-character format, e.g. `drop_states=['NJ', 'NY']` Takes precedence if there is any overlap with _keep_states_.
+- _**keep\_channels**(list of characters, optional)_: list of channels (store types) to keep, e.g. `keep_channels=['F', 'G']`. See Nielsen documentation for explanation of channels and list of options. 
+- _**drop\_channels**(list of characters, optional)_: list of channels (store types) to exclude, e.g. `drop_channels = ['C']`. Takes precedence if there is any overlap with _keep\_channels_. See Nielsen documentation for explanation of channels and list of options. 
 
 Note: Must be run AFTER `RetailReader.read_stores()`. Pre-filtering is not possible.
 
 
-**RetailReader**.**read_sales**(_**incl_promo** = True_)
-Populates `RetailReader.df_sales`
-Note this function call takes the longest time.
-Reads in the weekly, store x upc level sales data, post-filter if any have been applied. Uses pyarrow methods to filter and read the data to minimize memory and time use. May still require large amounts of memory/CPU.
+**RetailReader**.**read\_sales**(_**incl\_promo** = True_): This is the main function to read scanner data.
++ Populates `RetailReader.df_sales`
++ Reads in the weekly, store x upc level sales data, post-filter if any have been applied. 
++ Uses pyarrow methods to filter and read the data to minimize memory and time use. 
++ Warning: May still require large amounts of memory/CPU.
+- _**incl\_promo**(boolean, optional)_: Setting to ``False``  skips the promo and display fields.
 
-**RetailReader**.**write_data**(_**dir_write** = path.Path.cwd()_, _**stub** = 'out'), _**compr** = 'brotli'_, _**as_table** = False_, _**separator** = 'panel_year'_)
+**RetailReader**.**write\_data**(_**dir\_write** = path.Path.cwd()_, _**stub** = 'out'_, _**compr** = 'brotli'_, _**as\_table** = False_, _**separator** = 'panel\_year'_)
 Writes the pandas DataFrames of the RetailReader class to parquet format (see class description abvove).
-- _**dir_write**(pathlib Path object, optional)_: folder within which to write the parquets. Defalt is current working directory.
+- _**dir\_write**(pathlib Path object, optional)_: folder within which to write the parquets. Defalt is current working directory.
 - _**stub**(str)_: initial string to name all files. Files will be named 'stub'_'[file type].parquet', e.g. 'out_stores.parquet'
 - _**compr**(str)_: type of compression used for generating parquets. Default is brotli
-- _**as_table**(bool)_: whether to write as pyarrow separated row-tables. See `Example.py` for instance of how to write and read row-groups. Requires a _**separator**_ to generate rows for the row-tables. Useful if you seek to preserve space when reading in files by using only one row-group at a time. 
+- _**as\_table**(bool)_: whether to write as pyarrow separated row-tables. See `Example.py` for instance of how to write and read row-groups. Requires a _**separator**_ to generate rows for the row-tables. Useful if you seek to preserve space when reading in files by using only one row-group at a time. 
 - _**separator**(column name)_: variable on which to separate row-groups when saving as a pyarrow table. Note that [for now] the separator must be common to all files. Default is `panel_year`. If separator is not present in the file, it cannot be saved as a pyarrow table. If you are looking to save just a single file with a specific separator, modify the following snippet:
+
 ```
 RetailReader.read_{FILE_TYPE}()
 RR.write_data(dir_write, separator = {VARIABLE_NAME})
 ```
 
-**RetailReader.**get_module**(_file_sales=_)**: returns product module (inner category) corresponding to particular sales file. Auxiliary, not commonly used.
-- _file_sales(pathlib Path object)_: Retail Scanner sales file, e.g. 1046_2006.tsv
+###### Private Methods
+
+**RetailReader.**get\_module**(_file\_sales=_)**: returns product module (inner category) corresponding to particular sales file.
+- _**file\_sales**_ _(pathlib Path object)_: Retail Scanner sales file, e.g. 1046_2006.tsv
 
 
-**RetailReader.**get_group**(_file_sales=_)**: returns product group (outer category) corresponding to particular sales file. Auxiliary, not commonly used.
-- _file_sales(pathlib Path object)_: Retail Scanner sales file, e.g. 1046_2006.tsv
+**RetailReader.**get\_group**(_file\_sales=_)**: returns product group (outer category) corresponding to particular sales file.
+- _**file\_sales**_ _(pathlib Path object)_: Retail Scanner sales file, e.g. 1046_2006.tsv
+
 
 ### PanelReader
-**class** NielsenReader.*PanelReader(_**dir_read**=path.Path.cwd(), **verbose**=True_)*
-PanelReader defines the class object used to read in the Nielsen Consumer Panel data (see above)
+**class** *PanelReader(_**dir\_read**=path.Path.cwd(), **verbose**=True_)*
+PanelReader defines the class object used to read in the Nielsen Consumer Panel data.
 
 ###### Parameters:
-- **dir_read**(_pathlib Path object, optional_): points to the location of the Consumer Panel data files. Likely named `Panel` or something similar. Subfolders should be years. Default is the current working directory.
-- **verbose**(_bool_): if `True`, prints updates after processing files. Displayes size of files processed. Default is true.
+- _**dir\_read**_(_pathlib Path object, optional_): points to the location of the Consumer Panel data files. Likely named `Panel` or something similar. Subfolders should be years. Default is the current working directory.
+- _**verbose**_(_bool_): if `True`, prints updates after processing files. Displayes size of files processed. Default is true.
+
+###### Methods:
+- `filter_years()`: Selects years for which to process annual panelist, purchase, trips, and extra files. Used in pre-processing to limit required memory if desired; otherwise later functions will process all available data.
+- `read_retailers()`: Reads the retailers file, which list retailer codes and channels (and filters them).
+- `read_products()`: Reads in the set of product characteristics (and filters them).
+- `read_extra()`: Selects annual Products Extra files for all post-filtering years.
+- `read_variations()`: Populates `PanelReader.df_variations` with brand variations data, typically located in `MasterFiles/Latest/brand_variations.tsv`. Lists brand codes, descriptions, and any alternative descriptions.
+- `read_year()`: this does most of the work, and reads in panelists, trips, purchases for a single year
+- `read_annual()`: this is the main function repeatedly calls `read_year()` to read in panelists, trips, purchases for multiple years
+- `write_data()`: after reading in the data, this writes the tables as `.parquet` files
+- `read_revised_panelists()`: Corrects the Panelist data using errata provided by Nielsen for issues not yet incorporated into the data as of October 2021. Must have already called `PanelReader.read_annual()`, `PanelReader.read_products()`, `PanelReader.read_variations()`, `PanelReader.read_retailers()`
+- `process_open_issues()`: Corrects the product extra and panelist data using errata provided by Nielsen for two specific issues:
+    + `ExtraAttributes_FlavorCode`: adds missing flavor code and flavor description to 2010 products extra characteristics file
+    + `Panelist_maleHeadBirth_femaleHeadBirth`: corrects issue with male head of household birth month
+
 
 ###### Objects:
 - `df_products` (_pandas DataFrame_): default empty, stores products data after from Master Files processing 
@@ -244,83 +277,83 @@ PanelReader defines the class object used to read in the Nielsen Consumer Panel 
 
 #### Available Functions in the RetailReader Class
 
-**PanelReader**.**filter_years**(_**keep**=None_, _**drop**=None_)
+**PanelReader**.**filter\_years**(_**keep**=None_, _**drop**=None_)
 Selects years for which to process annual panelist, purchase, trips, and extra files. Used in pre-processing to limit required memory if desired; otherwise later functions will process all available data. Updates `PanelReader.all_years`
 - _**keep**(list of integers, optional)_:  list of years to keep, e.g. range(2004, 2013). Can only include years that are already present in the data, e.g. specifying `keep=[1999]` will result in an empty set of years
-- drop(list of integers, optional): list of years to remove, e.g. [2006, 2009, 2013]
+- _**drop**(list of integers, optional)_: list of years to remove, e.g. [2006, 2009, 2013]
 
-**PanelReader**.**read_retailers**():
+**PanelReader**.**read\_retailers**():
 Populates `PanelReader.df_retailers`
 Processes the Master retailers file, which list retailer codes and channels.
 
 Note that the file may be later revised following a call to `PanelReader.read_revised_panelists()` or `PanelReader.process_open_issues()`
 
-**PanelReader**.**read_products**(_**upc_list**=None_, _**keep_groups**=None_, _**drop_groups**=None_,  _**keep_modules**=None_,  _**drop_modules**=None_)
-Populates PanelReader.df_products, which should be identical to RetailReader.df_products following a call to RetailReader.read_products().
+**PanelReader**.**read\_products**(_**upc\_list**=None_, _**keep\_groups**=None_, _**drop\_groups**=None_,  _**keep\_modules**=None_,  _**drop\_modules**=None_)
+Populates `PanelReader.df_products`, which should be identical to `RetailReader.df_products` following a call to `RetailReader.read_products()`.
 
 Reads in the set of product characteristics, typically located in `Master_Files/Latest/products.tsv`. Optionally elects product groups (outer category) and product modules (inner category) for which to process annual sales files. 
 
 Note that the file may be later revised following a call to `PanelReader.read_revised_panelists()` or `PanelReader.process_open_issues()`. Such updating is only possible through `PanelReader`; the Retail Scanner files do not contain any revisions.
 
-- _**upc_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
-- _**keep_groups**(list of integers, optional)_: list of product groups to keep, e.g. `keep_groups=[1508, 1048]`
-- _**drop_groups**(list of integers, optional)_: list of product groups to exclude, e.g. `drop_groups = [1046]`. Takes precedence if there is any overlap with _keep_groups_
-- _**keep_groups**(list of integers, optional)_: list of product modules to keep, e.g. `keep_modules=[1481, 1482]`
-- _**drop_groups**(list of integers, optional)_: list of product modules to exclude, e.g. `drop_groups = [1483]`. Takes precedence if there is any overlap with _keep_module_
+- _**upc\_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
+- _**keep\_groups**(list of integers, optional)_: list of product groups to keep, e.g. `keep_groups=[1508, 1048]`
+- _**drop\_groups**(list of integers, optional)_: list of product groups to exclude, e.g. `drop_groups = [1046]`. Takes precedence if there is any overlap with _keep_groups_
+- _**keep\_groups**(list of integers, optional)_: list of product modules to keep, e.g. `keep_modules=[1481, 1482]`
+- _**drop\_groups**(list of integers, optional)_: list of product modules to exclude, e.g. `drop_groups = [1483]`. Takes precedence if there is any overlap with _keep_module_
 
 
 
-**PanelReader**.**read_extra**(_**years**=None_, _**upc_list**=None_)
+**PanelReader**.**read\_extra**(_**years**=None_, _**upc\_list**=None_)
 Populates `PanelReader.df_extra`
 Selects annual Products Extra files for all post-filtering years. Redundant with RetailReader.read_extra(). Does not have any revisions as of October 2021.
 Product group and module filtering are not possible; only UPC and year filtering are available.
 Note that UPCs may be repeated for different years. Use RMS versions to select appropriate years. Differences between multiple years for a single UPC may be due not to actual product changes but rather due to Nielsen filling in previously missing data. See Nielsen documentation for an in-depth description.
 
-- **years**(list of integers, optional): selects years for which to. Note that previous year-filtering of the PanelReader object will carry over unless a new set of years is specified
-- _**upc_list**(list of integers, optional)_: list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
+- _**years**_ (_list of integers, optional_): selects years for which to. Note that previous year-filtering of the PanelReader object will carry over unless a new set of years is specified
+- _**upc\_list**_ (_list of integers, optional_): list of Universal Product Codes to keep, e.g. `upc_list=[002111039080, 009017445929]` (leading zeros not required)
 
 
 
-**PanelReader**.**read_variations**()
+**PanelReader**.**read\_variations**()
 Populates `PanelReader.df_variations` with brand variations data, typically located in `MasterFiles/Latest/brand_variations.tsv`.
 Lists brand codes, descriptions, and any alternative descriptions.
 
-**PanelReader**.**read_year**(**year**, _**keep_dmas**=None_,  _**drop_dmas**=None_, _**keep_states**=None_, _**drop_states**=None_,)
+**PanelReader**.**read\_year**(**year**, _**keep\_dmas**=None_,  _**drop\_dmas**=None_, _**keep\_states**=None_, _**drop\_states**=None_,)
 Populates `PanelReader.df_panelists`, `PanelReader.df_purchases`, and `PanelReader.df_trips`
 Processes a single year of annual data (panelists, purchases, and trips data). Useful if you seek to only process one year at a time; otherwise use `read_annual` as described below
-- **year** (_int_): single year to process
-- **keep_dmas** (_list of integers_):  list of DMAs (Designated Market Areas) to keep, e.g. `keep_dma=[801, 503]`
-- **drop_dmas** (_list of integers_): list of DMAs (Designated Market Areas) to exclude, e.g. `drop_dma=[602]`. Takes precedence if there is any overlap with *keep_dma*.
-- **keep_states** (_list of strings_): list of states to keep, with list in two-character format, e.g. `keep_states=['TX', 'CA']`
-- **drop_states** (_list of strings_): list of states to exclude, with list in two-character format, e.g. `drop_states=['NJ', 'NY']` Takes precedence if there is any overlap with *keep_states*.
+- _**year**_ (_int_): single year to process
+- _**keep\_dmas**_ (_list of integers_):  list of DMAs (Designated Market Areas) to keep, e.g. `keep_dma=[801, 503]`
+- _**drop\_dmas**_ (_list of integers_): list of DMAs (Designated Market Areas) to exclude, e.g. `drop_dma=[602]`. Takes precedence if there is any overlap with *keep_dma*.
+- _**keep\_states**_ (_list of strings_): list of states to keep, with list in two-character format, e.g. `keep_states=['TX', 'CA']`
+- _**drop\_states**_ (_list of strings_): list of states to exclude, with list in two-character format, e.g. `drop_states=['NJ', 'NY']` Takes precedence if there is any overlap with *keep_states*.
 
 
-**PanelReader**.**read_annual**(_**keep_states**=None_, _**drop_states**=None_,  _**keep_dmas**=None_,  _**drop_dmas**=None_)
+**PanelReader**.**read\_annual**(_**keep\_states**=None_, _**drop\_states**=None_,  _**keep\_dmas**=None_,  _**drop\_dmas**=None_)
 Processes all years (post-`PanelReader.filter_years()`) with repeated calls to `PanelReader.read_year()`
-- **keep_dmas** (_list of integers_):  list of DMAs (Designated Market Areas) to keep, e.g. `keep_dma=[801, 503]`
-- **drop_dmas** (_list of integers_): list of DMAs (Designated Market Areas) to exclude, e.g. `drop_dma=[602]`. Takes precedence if there is any overlap with *keep_dma*.
-- **keep_states** (_list of strings_): list of states to keep, with list in two-character format, e.g. `keep_states=['TX', 'CA']`
-- **drop_states** (_list of strings_): list of states to exclude, with list in two-character format, e.g. `drop_states=['NJ', 'NY']` Takes precedence if there is any overlap with *keep_states*.
+- _**keep\_dmas**_ (_list of integers_):  list of DMAs (Designated Market Areas) to keep, e.g. `keep_dma=[801, 503]`
+- _**drop\_dmas**_ (_list of integers_): list of DMAs (Designated Market Areas) to exclude, e.g. `drop_dma=[602]`. Takes precedence if there is any overlap with *keep_dma*.
+- _**keep\_states**_ (_list of strings_): list of states to keep, with list in two-character format, e.g. `keep_states=['TX', 'CA']`
+- _**drop\_states**_ (_list of strings_): list of states to exclude, with list in two-character format, e.g. `drop_states=['NJ', 'NY']` Takes precedence if there is any overlap with *keep_states*.
 
 
-**PanelReader**.**write_data**(_**dir_write** = path.Path.cwd()_, _**stub** = 'out'), _**compr** = 'brotli'_, _**as_table** = False_, _**separator** = 'panel_year'_)
+**PanelReader**.**write\_data**(_**dir\_write** = path.Path.cwd()_, _**stub** = 'out'_, _**compr** = 'brotli'_, _**as\_table** = False_, _**separator** = 'panel\_year'_)
 Writes the pandas DataFrames of the RetailReader class to parquet format (see class description abvove).
-- _**dir_write**(pathlib Path object, optional)_: folder within which to write the parquets. Defalt is current working directory.
+- _**dir\_write**(pathlib Path object, optional)_: folder within which to write the parquets. Defalt is current working directory.
 - _**stub**(str)_: initial string to name all files. Files will be named 'stub'_'[file type].parquet', e.g. 'out_stores.parquet'
 - _**compr**(str)_: type of compression used for generating parquets. Default is brotli
-- _**as_table**(bool)_: whether to write as pyarrow separated row-tables. See `Example.py` for instance of how to write and read row-groups. Requires a _**separator**_ to generate rows for the row-tables. Useful if you seek to preserve space when reading in files by using only one row-group at a time. 
+- _**as\_table**(bool)_: whether to write as pyarrow separated row-tables. See `Example.py` for instance of how to write and read row-groups. Requires a _**separator**_ to generate rows for the row-tables. Useful if you seek to preserve space when reading in files by using only one row-group at a time. 
 - _**separator**(column name)_: variable on which to separate row-groups when saving as a pyarrow table. Note that [for now] the separator must be common to all files. Default is `panel_year`. If separator is not present in the file, it cannot be saved as a pyarrow table. If you are looking to save just a single file with a specific separator, modify the following snippet:
 ```
 RetailReader.read_{FILE_TYPE}()
 RR.write_data(dir_write, separator = {VARIABLE_NAME})
 ```
 
-**PanelReader**.**read_revised_panelists**()
+**PanelReader**.**read\_revised\_panelists**()
 Updates `PanelReader.df_products`, `PanelReader.df_variations`, `PanelReader.df_retailers`, and `PanelReader.df_panelists`
 Corrects the Panelist data using errata provided by Nielsen for issues not yet incorporated into the data as of October 2021. Must have already called `PanelReader.read_annual()`, `PanelReader.read_products()`, `PanelReader.read_variations()`, `PanelReader.read_retailers()`
 
 
-**PanelReader**.**process_open_issues**()
+**PanelReader**.**process\_open\_issues**()
 Updates `PanelReader.df_panelists` and `PanelReader.df_extra`
 Corrects the product extra and panelist data using errata provided by Nielsen for two specific issues:
 - `ExtraAttributes_FlavorCode`: adds missing flavor code and flavor description to 2010 products extra characteristics file
