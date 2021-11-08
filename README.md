@@ -20,6 +20,14 @@ To install with pip simply type:
 pip install git+https://github.com/chrisconlon/kiltsnielsen
 ```
 
+To install manually from Github (if your pip isn't setup correctly). After cloning, navigate to the correct directory:
+```
+git clone https://github.com/chrisconlon/kiltsnielsen.git
+sudo python setup.py install
+
+```
+
+
 Make sure your python installation has the latest pyarrow (as well as pandas and NumPy)
 
 Using pip:
