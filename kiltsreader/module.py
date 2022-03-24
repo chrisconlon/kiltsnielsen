@@ -1308,9 +1308,9 @@ class PanelReader(object):
 
         df_purchases = ds_purchases.to_table(filter = purchase_filter).to_pandas()
 
-        self.df_trips = pd.concat([self.df_trips, df_trips], ignore_index = True)
-        self.df_purchases = pd.concat([self.df_purchases, df_purchases], ignore_index = True)
-        self.df_panelists = pd.concat([self.df_panelists, df_panelists], ignore_index = True)
+        self.df_trips = pd.concat([self.df_trips, df_trips.copy()], ignore_index = True)
+        self.df_purchases = pd.concat([self.df_purchases, df_purchases.copy()], ignore_index = True)
+        self.df_panelists = pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
 
         return
         # need to have already read in products?
