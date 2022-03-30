@@ -1033,9 +1033,14 @@ class PanelReader(object):
         self.df_products = pd.DataFrame()
         self.df_variations = pd.DataFrame()
         self.df_retailers = pd.DataFrame()
-        self.df_trips = pd.DataFrame()
         self.df_panelists = pd.DataFrame()
+
+        self.df_trips = pd.DataFrame()
+        self.df_trips = []
         self.df_purchases = pd.DataFrame()
+        self.df_purchases = []
+
+
         self.df_extra = pd.DataFrame()
 
         # NOTE some of these are repeats from RR
@@ -1297,19 +1302,25 @@ class PanelReader(object):
                                                 filter = pads.field(
                                                     'household_code'
                                                     ).isin(unique_hh)
-                                                ).to_pandas()
+                                                )#.to_pandas()
 
-        unique_trip = df_trips['trip_code_uc'].unique()
+        #unique_trip = df_trips['trip_code_uc']#.unique()
 
         ds_purchases = pads.dataset(csv.read_csv(f_purchases,
                                                  parse_options = parse_opt,
                                                  convert_options = conv_opt))
-        purchase_filter = (pads.field('trip_code_uc').isin(unique_trip))
+        purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy()))
 
-        df_purchases = ds_purchases.to_table(filter = purchase_filter).to_pandas()
+        df_purchases = ds_purchases\
+                    .to_table(filter = purchase_filter)\
+                    .append_column('panel_year',pa.array([year]*ds_purchases.count_rows(),pa.int16()))
+                    #\#.to_pandas()
 
-        self.df_trips = pd.concat([self.df_trips, df_trips.copy()], ignore_index = True)
-        self.df_purchases = pd.concat([self.df_purchases, df_purchases.copy()], ignore_index = True)
+        self.df_trips.append(df_trips)
+        #self.df_trips = pd.concat([self.df_trips, df_trips.copy()], ignore_index = True)
+        #self.df_purchases = pd.concat([self.df_purchases, df_purchases.copy()], ignore_index = True)
+        self.df_purchases.append(df_purchases)
+
         self.df_panelists = pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
 
         return
@@ -1344,6 +1355,12 @@ class PanelReader(object):
                            keep_dmas = keep_dmas,
                            drop_dmas = drop_dmas)
             tock()
+        
+        print('Concatenating Tables...', year)
+        tick()
+        self.df_trips = pa.concat_tables(self.df_trips, promote=True)
+        self.df_purchases = pa.concat_tables(self.df_purchases, promote=True)
+        tock()
         return
 
 
