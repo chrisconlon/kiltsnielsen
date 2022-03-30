@@ -119,7 +119,11 @@ dict_types = {'upc': pa.uint64(),
               'use_descr': pa.string(),
               'size2_code': pa.uint64(),
               'size2_amount': pa.float64(),
-              'size2_units': pa.string()
+              'size2_units': pa.string(),
+              'deal_flag_uc': pa.uint8(),
+              'quantity':pa.uint16(),
+              'household_code':pa.uint32(),
+              'Household_Cd':pa.uint32(),
               }
 
 
@@ -1268,9 +1272,9 @@ class PanelReader(object):
             raise Exception(str_err)
 
         parse_opt = csv.ParseOptions(delimiter = '\t')
-        conv_opt = csv.ConvertOptions(auto_dict_encode = True,
+        conv_opt = csv.ConvertOptions(column_types = dict_types,
+                                      auto_dict_encode = True,
                                       auto_dict_max_cardinality = 1024)
-
         ds_panelists = pads.dataset(csv.read_csv(f_panelists,
                                                  parse_options = parse_opt,
                                                  convert_options = conv_opt))
@@ -1297,29 +1301,25 @@ class PanelReader(object):
         unique_hh = df_panelists['household_code'].unique()
 
         df_trips = pads.dataset(csv.read_csv(f_trips,
-                                            parse_options = parse_opt
-                                            )).to_table(
-                                                filter = pads.field(
-                                                    'household_code'
-                                                    ).isin(unique_hh)
-                                                )#.to_pandas()
+                    parse_options = parse_opt,
+                    convert_options = conv_opt)
+                    ).to_table(filter = pads.field('household_code').isin(unique_hh))
 
-        #unique_trip = df_trips['trip_code_uc']#.unique()
-
-        ds_purchases = pads.dataset(csv.read_csv(f_purchases,
-                                                 parse_options = parse_opt,
-                                                 convert_options = conv_opt))
         purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy()))
 
+        ds_purchases = pads.dataset(csv.read_csv(f_purchases,
+                    parse_options = parse_opt,
+                    convert_options = conv_opt))
+
         df_purchases = ds_purchases\
-                    .to_table(filter = purchase_filter)\
-                    .append_column('panel_year',pa.array([year]*ds_purchases.count_rows(),pa.int16()))
-                    #\#.to_pandas()
+            .to_table(filter = purchase_filter)\
+            .append_column('panel_year',pa.array([year]*ds_purchases.count_rows(),pa.int16()))
 
         self.df_trips.append(df_trips)
+        self.df_purchases.append(df_purchases)
+
         #self.df_trips = pd.concat([self.df_trips, df_trips.copy()], ignore_index = True)
         #self.df_purchases = pd.concat([self.df_purchases, df_purchases.copy()], ignore_index = True)
-        self.df_purchases.append(df_purchases)
 
         self.df_panelists = pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
 
@@ -1356,11 +1356,10 @@ class PanelReader(object):
                            drop_dmas = drop_dmas)
             tock()
         
-        print('Concatenating Tables...', year)
-        tick()
-        self.df_trips = pa.concat_tables(self.df_trips, promote=True)
-        self.df_purchases = pa.concat_tables(self.df_purchases, promote=True)
-        tock()
+        print('Concatenating Tables...')
+        self.df_trips = pa.concat_tables(self.df_trips, promote=True).to_pandas(self_destruct=True, split_blocks=True)
+        self.df_purchases = pa.concat_tables(self.df_purchases, promote=True).to_pandas(self_destruct=True, split_blocks=True)
+
         return
 
 
