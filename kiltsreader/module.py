@@ -1357,8 +1357,8 @@ class PanelReader(object):
             tock()
         
         print('Concatenating Tables...')
-        self.df_trips = pa.concat_tables(self.df_trips, promote=True).to_pandas(self_destruct=True, split_blocks=True)
-        self.df_purchases = pa.concat_tables(self.df_purchases, promote=True).to_pandas(self_destruct=True, split_blocks=True)
+        #self.df_trips = pa.concat_tables(self.df_trips, promote=True).to_pandas(self_destruct=True, split_blocks=True)
+        #self.df_purchases = pa.concat_tables(self.df_purchases, promote=True).to_pandas(self_destruct=True, split_blocks=True)
 
         return
 
