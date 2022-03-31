@@ -1244,7 +1244,7 @@ class PanelReader(object):
 
 
     def read_year(self, year, keep_dmas = None, drop_dmas = None,
-        keep_states = None, drop_states = None):
+        keep_states = None, drop_states = None, add_household=False):
         """
         Function: reads a single year of panel data (an auxiliary method)
         Arguments: required: year
@@ -1315,6 +1315,14 @@ class PanelReader(object):
             .to_table(filter = purchase_filter)\
             .append_column('panel_year',pa.array([year]*ds_purchases.count_rows(),pa.int16()))
 
+        # Going through numpy and pandas map cannot be fastest solution here
+        if add_household:
+            d=dict(zip(df_trips['trip_code_uc'].to_numpy(),df_trips['household_code'].to_numpy()))
+            df_purchases = df_purchases.append_column(
+                'household_code',
+                pa.array(df_purchases['trip_code_uc'].to_pandas().map(d))
+                )
+
         self.df_trips.append(df_trips)
         self.df_purchases.append(df_purchases)
 
@@ -1330,7 +1338,7 @@ class PanelReader(object):
 
 
     def read_annual(self, keep_states = None, drop_states = None,
-                    keep_dmas = None, drop_dmas = None):
+                    keep_dmas = None, drop_dmas = None, add_household=False):
         """
         Function: populates all annual datasets, except df_extra:
             df_panelists
@@ -1353,7 +1361,8 @@ class PanelReader(object):
             self.read_year(year, keep_states = keep_states,
                            drop_states = drop_states,
                            keep_dmas = keep_dmas,
-                           drop_dmas = drop_dmas)
+                           drop_dmas = drop_dmas,
+                           add_household= add_household)
             tock()
         
         print('Concatenating Tables...')
