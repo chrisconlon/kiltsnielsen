@@ -1320,7 +1320,7 @@ class PanelReader(object):
             d=dict(zip(df_trips['trip_code_uc'].to_numpy(),df_trips['household_code'].to_numpy()))
             df_purchases = df_purchases.append_column(
                 'household_code',
-                pa.array(df_purchases['trip_code_uc'].to_pandas().map(d))
+                pa.array(df_purchases['trip_code_uc'].to_pandas().map(d), pa.uint32())
                 )
 
         self.df_trips.append(df_trips)
