@@ -1313,7 +1313,7 @@ class PanelReader(object):
 
         df_purchases = ds_purchases\
             .to_table(filter = purchase_filter)\
-            .append_column('panel_year',pa.array([year]*ds_purchases.count_rows(),pa.int16()))
+            .append_column('panel_year', pa.array([year]*ds_purchases.count_rows(),pa.int16()))
 
         # Going through numpy and pandas map cannot be fastest solution here
         if add_household:
