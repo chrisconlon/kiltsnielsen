@@ -1301,7 +1301,7 @@ class PanelReader(object):
 
         trip_filter = pads.field('household_code').isin(unique_hh)
         if keep_stores:
-            trip_filter = trip_filter & pads.field('store_code_uc').isin(stores_list)
+            trip_filter = trip_filter & pads.field('store_code_uc').isin(keep_stores)
 
         df_trips = pads.dataset(csv.read_csv(f_trips,
                     parse_options = parse_opt,
@@ -1341,7 +1341,7 @@ class PanelReader(object):
 
 
     def read_annual(self, keep_states = None, drop_states = None,
-                    keep_dmas = None, drop_dmas = None, stores_list=None, add_household=False):
+                    keep_dmas = None, drop_dmas = None, keep_stores=None, add_household=False):
         """
         Function: populates all annual datasets, except df_extra:
             df_panelists
@@ -1365,7 +1365,7 @@ class PanelReader(object):
                            drop_states = drop_states,
                            keep_dmas = keep_dmas,
                            drop_dmas = drop_dmas,
-                           stores_list = stores_list,
+                           keep_stores = keep_stores,
                            add_household= add_household)
             tock()
         
