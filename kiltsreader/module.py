@@ -760,9 +760,8 @@ class RetailReader(object):
             if list_stores is None:
                 return pa_my.to_table()
 
-            return pa_my.to_table(filter =
-                                  pads.field('store_code_uc'
-                                             ).isin(list_stores))
+            return pa_my.to_table(filter =pads.field('store_code_uc').isin(list_stores))
+
         # read all the modules (and groups) for one year
         def aux_read_year(year, incl_promo = True):
             if self.verbose == True:
@@ -1610,9 +1609,4 @@ class PanelReader(object):
                     f_ann, on = ['panel_year', 'household_code'],
                     suffixes = ('', '_revised'),
                     how = 'left')
-
-
-
-
-
 
