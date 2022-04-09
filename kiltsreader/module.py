@@ -1243,7 +1243,7 @@ class PanelReader(object):
 
 
     def read_year(self, year, keep_dmas = None, drop_dmas = None,
-        keep_states = None, drop_states = None, add_household=False):
+        keep_states = None, drop_states = None, keep_stores=None, add_household=False):
         """
         Function: reads a single year of panel data (an auxiliary method)
         Arguments: required: year
@@ -1299,10 +1299,14 @@ class PanelReader(object):
         # Get a list of Unique HH
         unique_hh = df_panelists['household_code'].unique()
 
+        trip_filter = pads.field('household_code').isin(unique_hh)
+        if keep_stores:
+            trip_filter = trip_filter & pads.field('store_code_uc').isin(stores_list)
+
         df_trips = pads.dataset(csv.read_csv(f_trips,
                     parse_options = parse_opt,
                     convert_options = conv_opt)
-                    ).to_table(filter = pads.field('household_code').isin(unique_hh))
+                    ).to_table(filter = trip_filter)
 
         purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy()))
 
@@ -1337,7 +1341,7 @@ class PanelReader(object):
 
 
     def read_annual(self, keep_states = None, drop_states = None,
-                    keep_dmas = None, drop_dmas = None, add_household=False):
+                    keep_dmas = None, drop_dmas = None, stores_list=None, add_household=False):
         """
         Function: populates all annual datasets, except df_extra:
             df_panelists
@@ -1361,6 +1365,7 @@ class PanelReader(object):
                            drop_states = drop_states,
                            keep_dmas = keep_dmas,
                            drop_dmas = drop_dmas,
+                           stores_list = stores_list,
                            add_household= add_household)
             tock()
         
