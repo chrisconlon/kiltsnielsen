@@ -1300,6 +1300,7 @@ class PanelReader(object):
         unique_hh = df_panelists['household_code'].unique()
 
         trip_filter = pads.field('household_code').isin(unique_hh)
+
         if keep_stores:
             trip_filter = trip_filter & pads.field('store_code_uc').isin(keep_stores)
 
@@ -1312,11 +1313,11 @@ class PanelReader(object):
 
         ds_purchases = pads.dataset(csv.read_csv(f_purchases,
                     parse_options = parse_opt,
-                    convert_options = conv_opt))
+                    convert_options = conv_opt))\
+                    .to_table(filter = purchase_filter)
 
         df_purchases = ds_purchases\
-            .to_table(filter = purchase_filter)\
-            .append_column('panel_year', pa.array([year]*ds_purchases.count_rows(),pa.int16()))
+                .append_column('panel_year', pa.array([year]*ds_purchases.count_rows(),pa.int16()))
 
         # Going through numpy and pandas map cannot be fastest solution here
         if add_household:
