@@ -1309,7 +1309,8 @@ class PanelReader(object):
                     convert_options = conv_opt)
                     ).to_table(filter = trip_filter)
 
-        purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy()))
+        purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy())) &\
+                          (pads.field('upc').isin(self.df_products.upc.unique()))
 
         ds_purchases = pads.dataset(csv.read_csv(f_purchases,
                     parse_options = parse_opt,
