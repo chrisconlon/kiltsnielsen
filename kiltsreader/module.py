@@ -1374,10 +1374,7 @@ class PanelReader(object):
             tock()
 
         # Filter products for only those in sales data
-
-        
-
-        self.df_products = self.df_products[self.df_products.upc.isin(pa.concat_tables(pr.df_purchases).select(['upc'])['upc'])]
+        #self.df_products = self.df_products[self.df_products.upc.isin(pa.concat_tables(self.df_purchases).select(['upc'])['upc'].to_numpy())]
 
         print('Concatenating Tables...')
         #self.df_trips = pa.concat_tables(self.df_trips, promote=True).to_pandas(self_destruct=True, split_blocks=True)
