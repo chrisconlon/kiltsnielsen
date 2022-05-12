@@ -835,12 +835,15 @@ class RetailReader(object):
         # cols_ss = ['store_code_uc', 'panel_year']
         self.df_sales = pd.merge(df_sales, self.df_rms, on = cols_rs)
 
+        
 
         # # finally, drop the stores that have no sales
         final_stores = self.df_sales['store_code_uc'].unique()
         mask_ss = self.df_stores['store_code_uc'].isin(final_stores)
         self.df_stores = self.df_stores[mask_ss].copy()
 
+        # Filter products for only those in sales data
+        self.df_products = self.df_products[self.df_products.upc.isin(self.df_sales.upc.unique())]
 
 
     def write_data(self, dir_write = path.Path.cwd(), stub = 'out',
@@ -1369,7 +1372,10 @@ class PanelReader(object):
                            keep_stores = keep_stores,
                            add_household= add_household)
             tock()
-        
+
+        # Filter products for only those in sales data
+        self.df_products = self.df_products[self.df_products.upc.isin(self.df_sales.upc.unique())]
+
         print('Concatenating Tables...')
         #self.df_trips = pa.concat_tables(self.df_trips, promote=True).to_pandas(self_destruct=True, split_blocks=True)
         #self.df_purchases = pa.concat_tables(self.df_purchases, promote=True).to_pandas(self_destruct=True, split_blocks=True)
