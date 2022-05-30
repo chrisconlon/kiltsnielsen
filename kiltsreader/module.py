@@ -33,6 +33,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as pads
 import pyarrow.parquet as pq
+import pyarrow.compute as pc
 from pyarrow import csv # Sometimes does not load properly, load separately
 
 import pathlib as path
@@ -77,8 +78,8 @@ dict_types = {'upc': pa.uint64(),
               'week_end':pa.uint32(),
               'units': pa.uint64(),
               'prmult': pa.uint8(),
-              'feature': pa.uint8(),
-              'display': pa.uint8(),
+              'feature': pa.int8(),
+              'display': pa.int8(),
               'price':pa.float64(),
               'panel_year': pa.uint64(),
               'flavor_code': pa.uint64(),
@@ -416,7 +417,7 @@ class RetailReader(object):
         self.df_products = pd.DataFrame()
         self.df_sales = pd.DataFrame()
         self.df_stores = pd.DataFrame()
-        self.df_rms = pd.DataFrame()
+        self.df_rms = {}
         self.df_extra = pd.DataFrame()
 
         return
@@ -545,15 +546,13 @@ class RetailReader(object):
         """
         parse_opt = csv.ParseOptions(delimiter = '\t')
         # convert the types as needed
-
         conv_opt = csv.ConvertOptions(column_types = dict_types)
-        # requires concatenating all the tables left in dict_rms
-        self.df_rms = pa.concat_tables([csv.read_csv(f,
-                                                     parse_options = parse_opt,
-                                                     convert_options = conv_opt
-                                                     )
-                                        for f in self.dict_rms.values()]
-                                       ).to_pandas()
+
+        self.df_rms = {}
+        for y in self.dict_rms.keys():
+            tab = csv.read_csv(self.dict_rms[y], parse_options = parse_opt, convert_options = conv_opt)
+            self.df_rms.update({y: dict(zip(tab['upc'].to_numpy(), tab['upc_ver_uc'].to_numpy()))})
+
         if self.verbose == True:
             print('Successfully Read in the RMS Files')
         return
@@ -737,10 +736,16 @@ class RetailReader(object):
         if len(self.df_stores) == 0:
             self.read_stores()
 
+        stores_dict = {name:  dict(zip(group['store_code_uc'],group['dma_code']))\
+            for name, group in self.df_stores.groupby(['panel_year'])}
+
+
+        if len(self.df_rms) ==0:
+            self.read_rms()
 
         # select columns
-        my_cols = ['store_code_uc', 'upc', 'week_end',
-                   'units', 'prmult', 'price']
+        my_cols = ['store_code_uc', 'upc', 'week_end', 'units', 'prmult', 'price']
+
         if incl_promo == True:
             my_cols = my_cols + ['feature', 'display']
 
@@ -760,94 +765,68 @@ class RetailReader(object):
             if list_stores is None:
                 return pa_my.to_table()
 
-            return pa_my.to_table(filter =pads.field('store_code_uc').isin(list_stores))
+            return pa_my.to_table(filter=pads.field('store_code_uc').isin(list_stores))
 
         # read all the modules (and groups) for one year
         def aux_read_year(year, incl_promo = True):
-            if self.verbose == True:
-                tick()
-                print('Processing Year', year)
-
             # get the list of stores that were present in the year of choice
-            mask_y = self.df_stores['panel_year'] == year
-            list_stores = self.df_stores.loc[mask_y, 'store_code_uc'].unique()
+            list_stores = self.df_stores.query('panel_year==@year').store_code_uc.unique()
 
-            pa_y = pa.concat_tables([aux_read_mod_year(f,
-                                                       list_stores,
-                                                       incl_promo = incl_promo)
+            pa_y = pa.concat_tables([aux_read_mod_year(f, list_stores, incl_promo = incl_promo)
                                      for f in self.dict_sales[year]
                                      ])
 
             # still a table object, not a pandas dataframe
             # since we will be concatenating years together, presumably?
-            if self.verbose == True:
-                print('Done with Year', year)
-                tock()
             return pa_y
 
-        #print(aux_read_year(2015, incl_promo))
-
-        df_sales = pa.concat_tables([
-            aux_read_year(y, incl_promo)
-            for y in self.dict_sales.keys()]).to_pandas()
-        #print(df_sales.head(10))
-
-#        df_sales['panel_year'] = np.floor(df_sales['week_end']/10000).astype(int)
-
         # after concatenation, clean up the full data frame
-        def aux_clean(df):
-            # first, fix prices to be a per-unit price
-            # or at least create a new column
-            df['unit_price'] = df['price'] / df['prmult']
-            # dictionary of the unique dates we consider
+        def aux_clean(df_tab, rms_dict, store_dict):
             # original format is 20050731
-            # NOTE different from the more formal year function
-            df['panel_year'] = np.floor(df['week_end']/10000).astype(int)
+            # NOTE different from the more formal year function (CC: not as far as I can tell)
+            df_tab = df_tab.set_column(2,'week_end', 
+                pa.array(pd.to_datetime( df_tab['week_end'].to_numpy(), format = '%Y%m%d'),
+                pa.timestamp('ns')))
 
-            dict_date = {x: pd.to_datetime(x, format = '%Y%m%d')
-                         for x in df['week_end'].unique()
-                         }
-            df['week_end'] = df['week_end'].map(dict_date)
+            if 'feature' in df_tab.schema.to_string():
+                fill_value = pa.scalar(-1, type=pa.int8())
+                df_tab = df_tab.set_column(6,'feature',pa.compute.fill_null(df_tab['feature'],fill_value))
+                df_tab = df_tab.set_column(7,'display',pa.compute.fill_null(df_tab['display'],fill_value))
 
-            if 'feature' in df.columns:
-                df['feature'].fillna(-1, inplace=True)
-                df['display'].fillna(-1, inplace=True)
+            # Compute unit price and year and add upc_ver_uc
+            df_tab = df_tab.append_column('unit_price', pc.divide(df_tab['price'],df_tab['prmult']))
+            df_tab = df_tab.append_column('panel_year', pc.cast(pc.year(df_tab['week_end']),pa.uint16()))
+            df_tab = df_tab.append_column('upc_ver_uc', pa.array(df_tab['upc'].to_pandas().map(rms_dict).fillna(0),pa.uint8()))
+            df_tab = df_tab.append_column('dma_code', pa.array(df_tab['store_code_uc'].to_pandas().map(store_dict).fillna(0),pa.uint16()))
 
-            # NOTE skipping the recasting of data types
+            return df_tab
 
-            return df
-
-        df_sales = aux_clean(df_sales)
-
-        if len(self.df_rms) ==0:
-            self.read_rms()
+        if self.verbose == True:
+            print('Reading Sales')
+            tick()
+        
+        # This does the work -- keep as PyArrow table
+        self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo), self.df_rms[y], stores_dict[y])
+                    for y in self.dict_sales.keys()])
+        
+        if self.verbose == True:
+            print('Finished Sales')
+            tock()
 
         # NOTE: ORIGINAL CODE MERGES THIS WITH df_stores
-        # but I am skipping that here
-        # only going to merge with RMS
-        # which requires getting panel_year
-        #self.df_sales = df_sales.copy()
-
-        # this line might take a long time
-
-        # merge in the versions
-        cols_rs = ['upc', 'panel_year']
-        # cols_ss = ['store_code_uc', 'panel_year']
-        self.df_sales = pd.merge(df_sales, self.df_rms, on = cols_rs)
-
-        
-
         # # finally, drop the stores that have no sales
-        final_stores = self.df_sales['store_code_uc'].unique()
-        mask_ss = self.df_stores['store_code_uc'].isin(final_stores)
+        stores_list = pc.unique(self.df_sales['store_code_uc']).to_numpy()
+        mask_ss = self.df_stores['store_code_uc'].isin(stores_list)
         self.df_stores = self.df_stores[mask_ss].copy()
 
         # Filter products for only those in sales data
-        self.df_products = self.df_products[self.df_products.upc.isin(self.df_sales.upc.unique())]
+        prod_list = pc.unique(self.df_sales['upc']).to_numpy()
+        self.df_products = self.df_products[self.df_products.upc.isin(prod_list)]
 
+        return 
 
     def write_data(self, dir_write = path.Path.cwd(), stub = 'out',
-                   compr = 'brotli', as_table = False,
+                   compr = 'brotli', as_arrow = False,
                    separator = 'panel_year'):
 
         """
@@ -855,7 +834,7 @@ class RetailReader(object):
         Arguments: optional: dir_write: Path
         stub: default 'out'
         compression type: detault 'nbrotli'
-        as_table: if you want to use the pyarrow separated row-tables,
+        as_arrow: if you want to use the pyarrow separated dataset,
         then set to True
         separator: column on which to separate rows for the pyarrow Table feature
 
@@ -896,53 +875,49 @@ class RetailReader(object):
                 print('Wrote as direct parquet to', filename)
             return
 
-        if as_table == False:
-            aux_write_direct(self.df_stores, f_stores)
+        # def aux_write_separated(df, filename, separator = 'dma_code',
+        #                     compr = 'brotli'):
+        #     if df.empty:
+        #         return
+        #     if not separator in df:
+        #         #print(filename)
+        #         if self.verbose == True:
+        #             print('Separator not found in DataFrame. Writing directly')
+        #         aux_write_direct(df, filename)
+        #         return
+
+        #     # get a list of separators
+        #     seps = df[separator].unique()
+        #     # separate the DataFrames
+        #     dfs_sep = [df[df[separator] == sep] for sep in seps]
+
+        #     # get the writer object from the first spearated dataframe
+        #     table0 = pa.Table.from_pandas(dfs_sep[0])
+        #     writer = pq.ParquetWriter(filename, table0.schema,
+        #                               compression = compr)
+        #     for df in dfs_sep:
+        #         table = pa.Table.from_pandas(df)
+        #         writer.write_table(table)
+        #     writer.close()
+
+        #     if self.verbose == True:
+        #         print('Wrote Data to {d} with stub {s} and row groups {sep}'.format(d=dir_write, s=stub, sep=separator))
+
+        #     return
+
+        # only separate the sales file
+        aux_write_direct(self.df_stores, f_stores)
+        aux_write_direct(self.df_products, f_products)
+        aux_write_direct(self.df_extra, f_extra)
+
+        if as_arrow == False:
+            self.df_sales = self.df_sales.to_pandas()
             aux_write_direct(self.df_sales, f_sales)
-            aux_write_direct(self.df_products, f_products)
-            aux_write_direct(self.df_extra, f_extra)
-
-            return # end the job right here
-
-
-        def aux_write_separated(df, filename, separator = 'dma_code',
-                            compr = 'brotli'):
-            if df.empty:
-                return
-            if not separator in df:
-                #print(filename)
-                if self.verbose == True:
-                    print('Separator not found in DataFrame. Writing directly')
-                aux_write_direct(df, filename)
-                return
-
-            # get a list of separators
-            seps = df[separator].unique()
-            # separate the DataFrames
-            dfs_sep = [df[df[separator] == sep] for sep in seps]
-
-            # get the writer object from the first spearated dataframe
-            table0 = pa.Table.from_pandas(dfs_sep[0])
-            writer = pq.ParquetWriter(filename, table0.schema,
-                                      compression = compr)
-            for df in dfs_sep:
-                table = pa.Table.from_pandas(df)
-                writer.write_table(table)
-            writer.close()
-
+        else:
+            dir_sales = self.dir_write /'{stub}_sales'.format(stub=stub)
+            pads.write_dataset(self.df_sales, dir_sales, format="parquet", partitioning=separator, existing_data_behavior='overwrite_or_ignore')
             if self.verbose == True:
-                print('Wrote Data to {d} with stub {s} and row groups {sep}'.format(d=dir_write, s=stub, sep=separator))
-
-            return
-
-        # can separate out the files and write them as pyarrow tables
-        # create separate dataframes and avoid overwhelming your system, i guess
-        aux_write_separated(self.df_stores, f_stores, separator)
-        aux_write_separated(self.df_sales, f_sales, separator)
-        aux_write_separated(self.df_products, f_products, separator)
-        aux_write_separated(self.df_extra, f_extra, separator)
-
-
+                print('Wrote Dataset to {dir_sales} and partition {sep}'.format(d=dir_write, s=stub, sep=separator))
         return
 
 # %% Defining the PanelReader class
