@@ -915,7 +915,14 @@ class RetailReader(object):
             aux_write_direct(self.df_sales, f_sales)
         else:
             dir_sales = self.dir_write /'{stub}_sales'.format(stub=stub)
-            pads.write_dataset(self.df_sales, dir_sales, format="parquet", partitioning=separator, existing_data_behavior='overwrite_or_ignore')
+
+            # this is awkward but readable
+            pq.write_to_dataset(self.df_sales, version='2.6', 
+                root_path=write_dir, use_legacy_dataset=True,
+                partition_cols=['dma_code'], compression='brotli')
+
+            # this gives a bus error on read -- wait for PyArrow update
+            #pads.write_dataset(self.df_sales, dir_sales, format="parquet", partitioning=separator, existing_data_behavior='overwrite_or_ignore')
             if self.verbose == True:
                 print('Wrote Dataset to {dir_sales} and partition {sep}'.format(d=dir_write, s=stub, sep=separator))
         return
