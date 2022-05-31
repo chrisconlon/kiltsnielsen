@@ -924,7 +924,7 @@ class RetailReader(object):
             # this gives a bus error on read -- wait for PyArrow update
             #pads.write_dataset(self.df_sales, dir_sales, format="parquet", partitioning=separator, existing_data_behavior='overwrite_or_ignore')
             if self.verbose == True:
-                print('Wrote Dataset to {dir_sales} and partition {sep}'.format(d=dir_write, s=stub, sep=separator))
+                print('Wrote Dataset to {dir_sales} and partition {sep}'.format(d=dir_sales, sep=separator))
         return
 
 # %% Defining the PanelReader class
