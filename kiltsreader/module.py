@@ -918,7 +918,7 @@ class RetailReader(object):
 
             # this is awkward but readable
             pq.write_to_dataset(self.df_sales, version='2.6', 
-                root_path=write_dir, use_legacy_dataset=True,
+                root_path=dir_sales, use_legacy_dataset=True,
                 partition_cols=['dma_code'], compression='brotli')
 
             # this gives a bus error on read -- wait for PyArrow update
