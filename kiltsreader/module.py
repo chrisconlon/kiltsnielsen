@@ -81,7 +81,6 @@ dict_types = {'upc': pa.uint64(),
               'feature': pa.int8(),
               'display': pa.int8(),
               'price':pa.float64(),
-              'panel_year': pa.uint64(),
               'flavor_code': pa.uint64(),
               'flavor_descr': pa.string(),
               'form_code': pa.uint64(),
@@ -551,7 +550,7 @@ class RetailReader(object):
         self.df_rms = {}
         for y in self.dict_rms.keys():
             tab = csv.read_csv(self.dict_rms[y], parse_options = parse_opt, convert_options = conv_opt)
-            self.df_rms.update({y: dict(zip(tab['upc'].to_numpy(), tab['upc_ver_uc'].to_numpy()))})
+            self.df_rms.append(tab)
 
         if self.verbose == True:
             print('Successfully Read in the RMS Files')
