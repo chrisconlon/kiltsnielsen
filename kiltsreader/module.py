@@ -646,7 +646,7 @@ class RetailReader(object):
                                                    parse_options = parse_opt,
                                                    convert_options = conv_opt
                                                    )
-                                      for f in rr.dict_stores.values()]
+                                      for f in self.dict_stores.values()]
                                      )
 
         # harmonize the column name for years
