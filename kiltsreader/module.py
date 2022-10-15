@@ -803,7 +803,7 @@ class RetailReader(object):
         
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
         self.df_sales = self.df_sales.join(self.df_rms, keys=["upc","panel_year"],join_type='left outer')
-        self.df_sales = self.df_sales.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
+        self.df_sales = self.df_sales.join(self.df_stores.select(['store_code_uc','panel_year','dma_code','retailer_code','parent_code']),
             keys=["store_code_uc","panel_year"],join_type='left outer')
 
         if self.verbose == True:
