@@ -809,8 +809,7 @@ class RetailReader(object):
             tick()
         
         # This does the work -- keep as PyArrow table
-        self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo))
-                    for y in self.dict_sales.keys()])
+        self.df_sales = pa.concat_tables([aux_clean(df_tab=aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
         
         if self.verbose == True:
             print('Finished Sales')
