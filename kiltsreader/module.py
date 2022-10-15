@@ -802,9 +802,9 @@ class RetailReader(object):
         self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
         
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
-        self.df_sales = self.df_sales.join(self.df_rms, keys=["upc","panel_year"],join_type='left_outer')
+        self.df_sales = self.df_sales.join(self.df_rms, keys=["upc","panel_year"],join_type='left outer')
         self.df_sales = self.df_sales.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
-            keys=["store_code_uc","panel_year"],join_type='left_outer')
+            keys=["store_code_uc","panel_year"],join_type='left outer')
 
         if self.verbose == True:
             print('Finished Sales')
