@@ -547,10 +547,10 @@ class RetailReader(object):
         # convert the types as needed
         conv_opt = csv.ConvertOptions(column_types = dict_types)
 
-        self.df_rms = {}
-        for y in self.dict_rms.keys():
-            tab = csv.read_csv(self.dict_rms[y], parse_options = parse_opt, convert_options = conv_opt)
-            self.df_rms.append(tab)
+        self.df_rms = pa.concat_tables(
+            [csv.read_csv(self.dict_rms[y], parse_options = parse_opt, convert_options = conv_opt)
+             for y in self.dict_rms.keys()]
+            )
 
         if self.verbose == True:
             print('Successfully Read in the RMS Files')
@@ -801,7 +801,7 @@ class RetailReader(object):
             df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left_outer')
             df_tab = df_tab.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
                  keys=["store_code_uc","panel_year"],join_type='left_outer')
-            
+
             return df_tab
 
         if self.verbose == True:
