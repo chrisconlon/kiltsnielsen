@@ -796,8 +796,8 @@ class RetailReader(object):
             # Compute unit price and year and add upc_ver_uc
             df_tab = df_tab.append_column('unit_price', pc.divide(df_tab['price'],df_tab['prmult']))
             df_tab = df_tab.append_column('panel_year', pc.cast(pc.year(df_tab['week_end']),pa.uint16()))
-            df_tab = df_tab.append_column('upc_ver_uc', pa.array(df_tab['upc'].to_pandas().map(rms_dict).fillna(0),pa.uint8()))
-            df_tab = df_tab.append_column('dma_code', pa.array(df_tab['store_code_uc'].to_pandas().map(store_dict).fillna(0),pa.uint16()))
+            #df_tab = df_tab.append_column('upc_ver_uc', pa.array(df_tab['upc'].to_pandas().map(rms_dict).fillna(0),pa.uint8()))
+            #df_tab = df_tab.append_column('dma_code', pa.array(df_tab['store_code_uc'].to_pandas().map(store_dict).fillna(0),pa.uint16()))
 
             return df_tab
 
