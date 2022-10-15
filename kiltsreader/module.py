@@ -735,10 +735,6 @@ class RetailReader(object):
         if len(self.df_stores) == 0:
             self.read_stores()
 
-        stores_dict = {name:  dict(zip(group['store_code_uc'],group['dma_code']))\
-            for name, group in self.df_stores.groupby(['panel_year'])}
-
-
         if len(self.df_rms) ==0:
             self.read_rms()
 
@@ -806,9 +802,9 @@ class RetailReader(object):
         
 
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
-        #    df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left_outer')
-        #    df_tab = df_tab.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
-        #         keys=["store_code_uc","panel_year"],join_type='left_outer')
+        df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left_outer')
+        df_tab = df_tab.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
+            keys=["store_code_uc","panel_year"],join_type='left_outer')
 
         if self.verbose == True:
             print('Finished Sales')
