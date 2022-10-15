@@ -683,33 +683,31 @@ class RetailReader(object):
         if self.verbose == True:
             print('Initial Store Count: ', len(self.df_stores))
 
-        df_stores = self.df_stores.copy()
+        df_stores = self.df_stores
+        my_filter = pc.greater(df_stores['store_code_uc'],0)
 
         if keep_dmas:
-            mask_kd = df_stores['dma_code'].isin(keep_dmas)
-            df_stores = df_stores[mask_kd]
+            my_filter = pc.and_(my_filter, pc.is_in(self.df_stores['dma_code'], value_set=pa.array(keep_dmas, pa.uint16())))
+
         if drop_dmas:
-            mask_dd = df_stores['dma_code'].isin(drop_dmas)
-            df_stores = df_stores[~mask_dd]
+            my_filter = pc.and_not(my_filter, pc.is_in(self.df_stores['dma_code'], value_set=pa.array(drop_dmas, pa.uint16())))
 
         if keep_channels:
-            mask_kc = df_stores['channel_code'].isin(keep_channels)
-            df_stores = df_stores[mask_kc]
+            my_filter = pc.and_(my_filter, pc.is_in(self.df_stores['channel_code'], value_set=pa.array(keep_channels, pa.string())))
+
         if drop_channels:
-            mask_dc = df_stores['channel_code'].isin(drop_channels)
-            df_stores = df_stores[~mask_dc]
+            my_filter = pc.and_not(my_filter, pc.is_in(self.df_stores['channel_code'], value_set=pa.array(drop_channels, pa.string())))
 
         if keep_states:
-            mask_ks = df_stores['fips_state_descr'].isin(keep_states)
-            df_stores = df_stores[mask_ks]
-        if drop_states:
-            mask_ds = df_stores['fips_state_descr'].isin(drop_states)
-            df_stores = df_stores[~mask_ds]
+            my_filter = pc.and_(my_filter, pc.is_in(self.df_stores['fips_state_descr'], value_set=pa.array(keep_states, pa.string())))
 
-        self.df_stores = df_stores.copy()
+        if drop_states:
+            my_filter = pc.and_not(my_filter, pc.is_in(self.df_stores['fips_state_descr'], value_set=pa.array(drop_states, pa.string())))
+
+        self.df_stores = self.df_stores.filter(my_filter)
+
         if self.verbose == True:
             print('Final Store Count: ', len(self.df_stores))
-        del(df_stores)
         return
 
     # Now, turn our attention to the Movement Files, i.e. the Sales
