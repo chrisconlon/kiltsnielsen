@@ -795,13 +795,6 @@ class RetailReader(object):
             # Compute unit price and year and add upc_ver_uc
             df_tab = df_tab.append_column('unit_price', pc.divide(df_tab['price'],df_tab['prmult']))
             df_tab = df_tab.append_column('panel_year', pc.cast(pc.year(df_tab['week_end']),pa.uint16()))
-
-
-            # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
-            df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left_outer')
-            df_tab = df_tab.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
-                 keys=["store_code_uc","panel_year"],join_type='left_outer')
-
             return df_tab
 
         if self.verbose == True:
@@ -811,6 +804,12 @@ class RetailReader(object):
         # This does the work -- keep as PyArrow table
         self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
         
+
+        # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
+        #    df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left_outer')
+        #    df_tab = df_tab.join(self.df_stores[['store_code_uc','panel_year','dma_code','retailer_code','parent_code']],
+        #         keys=["store_code_uc","panel_year"],join_type='left_outer')
+
         if self.verbose == True:
             print('Finished Sales')
             tock()
