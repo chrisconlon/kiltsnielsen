@@ -765,6 +765,7 @@ class RetailReader(object):
         # read all the modules (and groups) for one year
         def aux_read_year(year, incl_promo = True):
             # get the list of stores that were present in the year of choice
+            # CC: can we keep this as pa.Array()?
             list_stores = self.df_stores['store_code_uc'].filter(pc.equal(self.df_stores['panel_year'],year)).to_pylist()
 
             pa_y = pa.concat_tables([aux_read_mod_year(f, list_stores, incl_promo = incl_promo)
