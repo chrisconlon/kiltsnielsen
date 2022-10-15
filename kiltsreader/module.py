@@ -642,19 +642,21 @@ class RetailReader(object):
         parse_opt = csv.ParseOptions(delimiter = '\t')
         conv_opt = csv.ConvertOptions(column_types = dict_types)
         # renaming the year column for easier merging later on
-        df_stores = pa.concat_tables([csv.read_csv(f,
+        tab_stores = pa.concat_tables([csv.read_csv(f,
                                                    parse_options = parse_opt,
                                                    convert_options = conv_opt
                                                    )
-                                      for f in self.dict_stores.values()]
-                                     ).to_pandas().rename(
-                                         columns = {'year':'panel_year'})
+                                      for f in rr.dict_stores.values()]
+                                     )
+
+        # harmonize the column name for years
+        my_dict = {'year':'panel_year'}
+        col_names = [x if x not in my_dict else my_dict[x] for x in tab_stores.column_names]
+        self.df_stores = tab_stores.rename_columns(col_names)
 
         # fill blanks with zeroes
-        df_stores = df_stores.fillna(0)
-        self.df_stores = df_stores.copy()
+        # df_stores = df_stores.fillna(0)
 
-        del(df_stores)
         if self.verbose == True:
             print('Successfully Read in Stores Files')
 
