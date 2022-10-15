@@ -780,7 +780,7 @@ class RetailReader(object):
             return pa_y
 
         # after concatenation, clean up the full data frame
-        def aux_clean(self, df_tab):
+        def aux_clean(df_tab):
             # original format is 20050731
             # NOTE different from the more formal year function (CC: not as far as I can tell)
             df_tab = df_tab.set_column(2,'week_end', 
@@ -809,7 +809,7 @@ class RetailReader(object):
             tick()
         
         # This does the work -- keep as PyArrow table
-        self.df_sales = pa.concat_tables([aux_clean(df_tab=aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
+        self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
         
         if self.verbose == True:
             print('Finished Sales')
