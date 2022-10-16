@@ -718,26 +718,26 @@ class RetailReader(object):
 
         # after concatenation, clean up the full data frame
     def aux_clean(self, df_tab):
-            # original format is 20050731
-            # NOTE different from the more formal year function (CC: not as far as I can tell)
-            df_tab = df_tab.set_column(2,'week_end', 
-                pa.array(pd.to_datetime( df_tab['week_end'].to_numpy(), format = '%Y%m%d'),
-                pa.timestamp('ns')))
+        # original format is 20050731
+        # NOTE different from the more formal year function (CC: not as far as I can tell)
+        df_tab = df_tab.set_column(2,'week_end', 
+            pa.array(pd.to_datetime( df_tab['week_end'].to_numpy(), format = '%Y%m%d'),
+            pa.timestamp('ns')))
 
-            if 'feature' in df_tab.schema.to_string():
-                fill_value = pa.scalar(-1, type=pa.int8())
-                df_tab = df_tab.set_column(6,'feature',pa.compute.fill_null(df_tab['feature'],fill_value))
-                df_tab = df_tab.set_column(7,'display',pa.compute.fill_null(df_tab['display'],fill_value))
+        if 'feature' in df_tab.schema.to_string():
+            fill_value = pa.scalar(-1, type=pa.int8())
+            df_tab = df_tab.set_column(6,'feature',pa.compute.fill_null(df_tab['feature'],fill_value))
+            df_tab = df_tab.set_column(7,'display',pa.compute.fill_null(df_tab['display'],fill_value))
 
-            # Compute unit price and year and add upc_ver_uc
-            df_tab = df_tab.append_column('unit_price', pc.divide(df_tab['price'],df_tab['prmult']))
-            df_tab = df_tab.append_column('panel_year', pc.cast(pc.year(df_tab['week_end']),pa.uint16()))
-            df_tab = df_tab.append_column('revenue', pa.compute.multiply(df_tab['units'], df_tab['unit_price']))
+        # Compute unit price and year and add upc_ver_uc
+        df_tab = df_tab.append_column('unit_price', pc.divide(df_tab['price'],df_tab['prmult']))
+        df_tab = df_tab.append_column('panel_year', pc.cast(pc.year(df_tab['week_end']),pa.uint16()))
+        df_tab = df_tab.append_column('revenue', pa.compute.multiply(df_tab['units'], df_tab['unit_price']))
 
-            df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left outer')
-            df_tab = df_tab.join(self.df_stores.select(['store_code_uc','panel_year','dma_code','retailer_code','parent_code']),
-                keys=["store_code_uc","panel_year"],join_type='left outer')
-
+        df_tab = df_tab.join(self.df_rms, keys=["upc","panel_year"],join_type='left outer')
+        df_tab = df_tab.join(self.df_stores.select(['store_code_uc','panel_year','dma_code','retailer_code','parent_code']),
+            keys=["store_code_uc","panel_year"],join_type='left outer')
+        
         return df_tab
 
     def read_sales(self, incl_promo = True, agg_function=None, **kwargs):
@@ -808,7 +808,7 @@ class RetailReader(object):
             tick()
         
         # This does the work -- keep as PyArrow table
-        self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
+        self.df_sales = pa.concat_tables([self.aux_clean(aux_read_year(y, incl_promo)) for y in self.dict_sales.keys()])
         
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
 
