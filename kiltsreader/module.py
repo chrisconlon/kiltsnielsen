@@ -715,7 +715,7 @@ class RetailReader(object):
     # NOTE: read only those sales corresponding to the filtered stores
     # ask: do you want to include the promotional columns?
 
-    def read_sales(self, incl_promo = True, agg_function=None, **kwargs)):
+    def read_sales(self, incl_promo = True, agg_function=None, **kwargs):
         """
         Function: populates self.df_sales
         Note the method takes very long!
