@@ -801,7 +801,7 @@ class RetailReader(object):
                 keys=["store_code_uc","panel_year"],join_type='left outer')
             
             if add_dates:
-                my_dates=pd.DataFrame({'week_end':pa.compute.unique(rr.df_sales['week_end']).to_pandas().sort_values(ignore_index=True)})
+                my_dates=pd.DataFrame({'week_end':pa.compute.unique(df_tab['week_end']).to_pandas().sort_values(ignore_index=True)})
                 my_dates['quarter']=my_dates.week_end + pd.offsets.QuarterEnd(0)
                 my_dates['month']=my_dates['week_end'].astype('datetime64[M]')
                 df_tab=df_tab.join(pa.Table.from_pandas(my_dates,preserve_index=False), keys=["week_end"])
