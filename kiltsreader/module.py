@@ -812,8 +812,12 @@ class RetailReader(object):
             print('Reading Sales')
             tick()
         
+        
         # This does the work -- keep as PyArrow table
-        self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo), add_dates) for y in self.dict_sales.keys()])
+        if agg_function:
+            self.df_sales = pa.concat_tables([agg_function(aux_clean(aux_read_year(y, incl_promo), add_dates), **kwargs) for y in self.dict_sales.keys()])
+        else:
+            self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo), add_dates) for y in self.dict_sales.keys()])
         
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
 
