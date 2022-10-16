@@ -827,12 +827,14 @@ class RetailReader(object):
 
         # NOTE: ORIGINAL CODE MERGES THIS WITH df_stores
         # # finally, drop the stores that have no sales
-        self.df_stores = self.df_stores.filter(
-            pc.is_in(self.df_stores['store_code_uc'],
+        if 'store_code_uc' in self.df_sales.column_names:
+            self.df_stores = self.df_stores.filter(
+                pc.is_in(self.df_stores['store_code_uc'],
                 pc.unique(self.df_sales['store_code_uc'])))
 
         # Filter products for only those in sales data
-        self.df_products = self.df_products[self.df_products.upc.isin(pc.unique(self.df_sales['upc']).to_numpy())]
+        if 'upc' in self.df_sales.column_names:
+            self.df_products = self.df_products[self.df_products.upc.isin(pc.unique(self.df_sales['upc']).to_numpy())]
 
         return 
 
