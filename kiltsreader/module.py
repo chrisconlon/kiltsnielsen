@@ -1034,13 +1034,14 @@ class PanelReader(object):
         self.df_products = pd.DataFrame()
         self.df_variations = pd.DataFrame()
         self.df_retailers = pd.DataFrame()
-        self.df_panelists = pd.DataFrame()
 
-        self.df_trips = pd.DataFrame()
+        self.df_panelists = []
         self.df_trips = []
-        self.df_purchases = pd.DataFrame()
         self.df_purchases = []
 
+        #self.df_panelists = pd.DataFrame()
+        #self.df_trips = pd.DataFrame()
+        #self.df_purchases = pd.DataFrame()
 
         self.df_extra = pd.DataFrame()
 
