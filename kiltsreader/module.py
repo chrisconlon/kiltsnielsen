@@ -124,10 +124,10 @@ dict_types = {'upc': pa.uint64(),
               'quantity':pa.uint16(),
               'household_code':pa.uint32(),
               'Household_Cd':pa.uint32(),
-              'Fips_County_Desc':pa:string(),
-              'Fips_State_Desc':pa:string(),
-              'Scantrack_Market_Identifier_Desc':pa:string(),
-              'DMA_Name':pa:string(),
+              'Fips_County_Desc':pa.string(),
+              'Fips_State_Desc':pa.string(),
+              'Scantrack_Market_Identifier_Desc':pa.string(),
+              'DMA_Name':pa.string(),
               }
 
 
