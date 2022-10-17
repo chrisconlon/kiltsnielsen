@@ -1291,7 +1291,11 @@ class PanelReader(object):
             panelist_filter = panelist_filter & (~pads.field('DMA_Cd').isin(drop_dmas))
 
         # Get the Panelist Table Filtered and as a DataFrame
-        df_panelists = ds_panelists.to_table(filter = panelist_filter)#.to_pandas()
+        df_panelists = ds_panelists.to_table(filter = panelist_filter)
+        col_names = [x if x not in dict_column_map else dict_column_map[x] for x in df_panelists.column_names]
+        df_panelists = df_panelists.rename_columns(col_names)
+
+        #.to_pandas()
         #df_panelists = df_panelists.rename(columns = dict_column_map)
 
         # Get a list of Unique HH
