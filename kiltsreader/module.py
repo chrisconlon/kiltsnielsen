@@ -225,10 +225,10 @@ def get_products(self, upc_list=None,
         mask_dm = ~df_products['product_module_code'].isin(drop_modules)
         df_products = df_products[mask_dm]
     if keep_departments:
-        mask_km = df_products['department_code'].isin(keep_departments)
+        mask_kd = df_products['department_code'].isin(keep_departments)
         df_products = df_products[mask_kd]
     if drop_departments:
-        mask_dm = ~df_products['department_code'].isin(drop_departments)
+        mask_dd = ~df_products['department_code'].isin(drop_departments)
         df_products = df_products[mask_dd]
 
 
