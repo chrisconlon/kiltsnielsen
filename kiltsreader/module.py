@@ -1291,13 +1291,11 @@ class PanelReader(object):
             panelist_filter = panelist_filter & (~pads.field('DMA_Cd').isin(drop_dmas))
 
         # Get the Panelist Table Filtered and as a DataFrame
-        df_panelists = ds_panelists.to_table(filter = panelist_filter).to_pandas()
-        df_panelists = df_panelists.rename(columns = dict_column_map)
+        df_panelists = ds_panelists.to_table(filter = panelist_filter)#.to_pandas()
+        #df_panelists = df_panelists.rename(columns = dict_column_map)
 
         # Get a list of Unique HH
-        unique_hh = df_panelists['household_code'].unique()
-
-        trip_filter = pads.field('household_code').isin(unique_hh)
+        trip_filter = pads.field('household_code').isin(pc.unique(df_panelists['household_code']).to_pylist())
 
         if keep_stores:
             trip_filter = trip_filter & pads.field('store_code_uc').isin(keep_stores)
@@ -1321,10 +1319,12 @@ class PanelReader(object):
         if add_household:
             df_purchases=df_purchases.join(df_trips.select(['trip_code_uc','household_code']), keys=['trip_code_uc'])
 
+        # add to the list
         self.df_trips.append(df_trips)
         self.df_purchases.append(df_purchases)
+        self.df_panelists.append(df_panelists)
 
-        self.df_panelists = pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
+        # pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
 
         return
         # need to have already read in products?
@@ -1367,6 +1367,7 @@ class PanelReader(object):
         print('Concatenating Tables...')
         self.df_trips = pa.concat_tables(self.df_trips, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
         self.df_purchases = pa.concat_tables(self.df_purchases, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
+        self.df_panelists = pa.concat_tables(self.df_panelists, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
 
         return
 
