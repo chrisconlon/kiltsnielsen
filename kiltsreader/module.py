@@ -1319,17 +1319,10 @@ class PanelReader(object):
 
         # Going through numpy and pandas map cannot be fastest solution here
         if add_household:
-            d=dict(zip(df_trips['trip_code_uc'].to_numpy(),df_trips['household_code'].to_numpy()))
-            df_purchases = df_purchases.append_column(
-                'household_code',
-                pa.array(df_purchases['trip_code_uc'].to_pandas().map(d), pa.uint32())
-                )
+            df_purchases=df_purchases.join(df_trips.select(['trip_code_uc','household_code']), keys=['trip_code_uc'])
 
         self.df_trips.append(df_trips)
         self.df_purchases.append(df_purchases)
-
-        #self.df_trips = pd.concat([self.df_trips, df_trips.copy()], ignore_index = True)
-        #self.df_purchases = pd.concat([self.df_purchases, df_purchases.copy()], ignore_index = True)
 
         self.df_panelists = pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
 
@@ -1372,8 +1365,8 @@ class PanelReader(object):
         #self.df_products = self.df_products[self.df_products.upc.isin(pa.concat_tables(self.df_purchases).select(['upc'])['upc'].to_numpy())]
 
         print('Concatenating Tables...')
-        #self.df_trips = pa.concat_tables(self.df_trips, promote=True).to_pandas(self_destruct=True, split_blocks=True)
-        #self.df_purchases = pa.concat_tables(self.df_purchases, promote=True).to_pandas(self_destruct=True, split_blocks=True)
+        self.df_trips = pa.concat_tables(self.df_trips, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
+        self.df_purchases = pa.concat_tables(self.df_purchases, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
 
         return
 
