@@ -181,7 +181,8 @@ def get_year(file, type = 'Sales'):
 ## NOTE: INCORPORATE GROUP, MODULE PARTITIONING
 def get_products(self, upc_list=None,
                  keep_groups = None, drop_groups = None,
-                 keep_modules = None, drop_modules = None):
+                 keep_modules = None, drop_modules = None,
+                 keep_departments = None, drop_departments = None):
     """
     Arguments: 
         Required: RetailReader or PanelReader object
@@ -223,6 +224,13 @@ def get_products(self, upc_list=None,
     if drop_modules:
         mask_dm = ~df_products['product_module_code'].isin(drop_modules)
         df_products = df_products[mask_dm]
+    if keep_departments:
+        mask_km = df_products['department_code'].isin(keep_departments)
+        df_products = df_products[mask_kd]
+    if drop_departments:
+        mask_dm = ~df_products['department_code'].isin(drop_departments)
+        df_products = df_products[mask_dd]
+
 
 
     df_products['size1_units'] = df_products['size1_units'].astype('category')
@@ -562,7 +570,8 @@ class RetailReader(object):
 
     def read_products(self, upc_list=None,
                      keep_groups = None, drop_groups = None,
-                     keep_modules = None, drop_modules = None):
+                     keep_modules = None, drop_modules = None,
+                     keep_departments=None, drop_departments=None):
         """
         Function: populates self.df_products
 
@@ -589,7 +598,8 @@ class RetailReader(object):
         """
         get_products(self, upc_list=upc_list,
                      keep_groups=keep_groups, drop_groups=drop_groups,
-                     keep_modules=keep_modules, drop_modules=drop_modules)
+                     keep_modules=keep_modules, drop_modules=drop_modules,
+                     keep_departments=keep_departments, drop_departments=drop_departments)
         return
     def read_extra(self, years = None, upc_list = None):
         """
@@ -1133,7 +1143,8 @@ class PanelReader(object):
 
     def read_products(self, upc_list=None,
                      keep_groups = None, drop_groups = None,
-                     keep_modules = None, drop_modules = None):
+                     keep_modules = None, drop_modules = None,
+                     keep_departments=None, drop_departments=None):
         """
         Function: populates self.df_products
         
@@ -1161,7 +1172,8 @@ class PanelReader(object):
 
         get_products(self, upc_list=upc_list,
                      keep_groups=keep_groups, drop_groups=drop_groups,
-                     keep_modules=keep_modules, drop_modules=drop_modules)
+                     keep_modules=keep_modules, drop_modules=drop_modules,
+                     keep_departments=keep_departments, drop_departments=drop_departments)
 
         return
 
