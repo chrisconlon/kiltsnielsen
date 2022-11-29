@@ -11,7 +11,7 @@ The main advantages of this package are:
 4. It saves highly compressed (and fast) .parquet files
 5. Optional support for various fixes/updates issued by Kilts.
 
-These classes are built on  `pyarrow 5.0.1` [Apache Arrow v.5][apache] which you will need to install.
+These classes are built on  `pyarrow 10.0.0` [Apache Arrow][apache] which you will need to install.
 
 ### Installation
 

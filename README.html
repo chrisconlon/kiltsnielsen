@@ -1,6 +1,5 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body {
   max-width: 980px;
-  border: 1px solid #ddd;
   outline: 1300px solid #fff;
   margin: 16px auto;
 }
@@ -899,6 +898,10 @@ body .markdown-body
   vertical-align: middle;
 }
 
+.markdown-body diagram-div, .markdown-body div.uml-sequence-diagram, .markdown-body, div.uml-flowchart {
+  overflow: auto;
+}
+
 /* Media */
 @media only screen and (min-width: 480px) {
   .markdown-body {
@@ -1075,7 +1078,7 @@ body .markdown-body
 <li>It saves highly compressed (and fast) .parquet files</li>
 <li>Optional support for various fixes/updates issued by Kilts.</li>
 </ol>
-<p>These classes are built on  <code>pyarrow 5.0.1</code> <a href="https://arrow.apache.org">Apache Arrow v.5</a> which you will need to install.</p>
+<p>These classes are built on  <code>pyarrow 10.0.0</code> <a href="https://arrow.apache.org">Apache Arrow</a> which you will need to install.</p>
 <h3 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link"></a></h3>
 <p>To install with pip simply type:
 <div class="highlight"><pre>pip install git+https://github.com/chrisconlon/kiltsnielsen

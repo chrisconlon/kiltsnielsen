@@ -1430,9 +1430,13 @@ class PanelReader(object):
     
         def aux_write_direct(df, filename, compr = 'brotli'):
             #print(filename)
-            if df.empty:
-                return
-            df.to_parquet(filename, compression = compr)
+            if isinstance(df, pa.Table):
+                pq.write_table(df, filename, compression = compr)
+            if isinstance(df, pd.DataFrame):
+                if df.empty:
+                    return
+                else:
+                    df.to_parquet(filename, compression = compr)
             if self.verbose == True:
                 print('Wrote as direct parquet to', filename)
             return
@@ -1443,10 +1447,11 @@ class PanelReader(object):
             aux_write_direct(self.df_products, f_products)
             aux_write_direct(self.df_variations, f_variations)
             aux_write_direct(self.df_retailers, f_retailers)
+            aux_write_direct(self.df_extra, f_extra)
+
             aux_write_direct(self.df_trips, f_trips)
             aux_write_direct(self.df_panelists, f_panelists)
             aux_write_direct(self.df_purchases, f_purchases)
-            aux_write_direct(self.df_extra, f_extra)
     
             return # end the job right here
     
