@@ -324,6 +324,19 @@ def get_extra(self, years = None, upc_list = None):
     # sort by UPC
     return
 
+def aux_write_direct(df, filename, compr = 'brotli'):
+    #print(filename)
+    if isinstance(df, pa.Table):
+        pq.write_table(df, filename, compression = compr)
+        print('Wrote as direct parquet to', filename)
+    if isinstance(df, pd.DataFrame):
+        if df.empty:
+            return
+        else:
+            df.to_parquet(filename, compression = compr)
+            print('Wrote as direct parquet to', filename)
+    return
+
 # %%
 
 # Define class RetailReader
@@ -894,14 +907,6 @@ class RetailReader(object):
         f_products = self.dir_write / '{stub}_products.parquet'.format(stub=stub)
         f_extra = self.dir_write /'{stub}_extra.parquet'.format(stub=stub)
 
-        def aux_write_direct(df, filename, compr = 'brotli'):
-            if df.empty:
-                return
-            df.to_parquet(filename, compression = compr)
-            if self.verbose == True:
-                print('Wrote as direct parquet to', filename)
-            return
-
         # def aux_write_separated(df, filename, separator = 'dma_code',
         #                     compr = 'brotli'):
         #     if df.empty:
@@ -1427,19 +1432,6 @@ class PanelReader(object):
         f_panelists = self.dir_write / '{stub}_panelists.parquet'.format(stub=stub)
         f_purchases = self.dir_write / '{stub}_purchases.parquet'.format(stub=stub)
         f_extra = self.dir_write /'{stub}_extra.parquet'.format(stub=stub)
-    
-        def aux_write_direct(df, filename, compr = 'brotli'):
-            #print(filename)
-            if isinstance(df, pa.Table):
-                pq.write_table(df, filename, compression = compr)
-            if isinstance(df, pd.DataFrame):
-                if df.empty:
-                    return
-                else:
-                    df.to_parquet(filename, compression = compr)
-            if self.verbose == True:
-                print('Wrote as direct parquet to', filename)
-            return
 
         print(dir_write)
 
