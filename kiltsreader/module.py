@@ -771,42 +771,9 @@ class RetailReader(object):
         if incl_promo == True:
             my_cols = my_cols + ['feature', 'display']
 
-        # have to read one module-year at a time
-        # as a pandas table, which we will later concatenate
-        def aux_read_mod_year(filename, list_stores = None, incl_promo = True):
-
-            parse_opt = csv.ParseOptions(delimiter = '\t')
-            conv_opt = csv.ConvertOptions(column_types = dict_types,
-                                          include_columns = my_cols)
-            # is a dataset object that can be turned into a table
-            # but we can also filter immediately if we like
-            pa_my = pads.dataset(csv.read_csv(filename,
-                                              parse_options = parse_opt,
-                                              convert_options=conv_opt))
-
-            if list_stores is None:
-                return pa_my.to_table()
-
-            return pa_my.to_table(filter=pads.field('store_code_uc').isin(list_stores))
-
-        # read all the modules (and groups) for one year
-        def aux_read_year(year, incl_promo = True):
-            # get the list of stores that were present in the year of choice
-            # CC: can we keep this as pa.Array()?
-            list_stores = self.df_stores['store_code_uc'].filter(pc.equal(self.df_stores['panel_year'],year)).to_pylist()
-
-            pa_y = pa.concat_tables([aux_read_mod_year(f, list_stores, incl_promo = incl_promo)
-                                     for f in self.dict_sales[year]
-                                     ])
-
-            # still a table object, not a pandas dataframe
-            # since we will be concatenating years together, presumably?
-            return pa_y
-
-
-
-        # after concatenation, clean up the full data frame
-        def aux_clean(df_tab, add_dates):
+        # for each module-year, clean up the data frame
+        # optional: add_dates: calculate the month and quarter        
+        def aux_clean(df_tab, add_dates=False):
             # original format is 20050731
             # NOTE different from the more formal year function (CC: not as far as I can tell)
             df_tab = df_tab.set_column(2,'week_end', 
@@ -835,16 +802,50 @@ class RetailReader(object):
 
             return df_tab
 
+        # have to read one module-year at a time
+        # as a pandas table, which we will later concatenate
+        def aux_read_mod_year(filename, list_stores = None,  add_dates=False, agg_function=None, **kwargs):
+
+            parse_opt = csv.ParseOptions(delimiter = '\t')
+            conv_opt = csv.ConvertOptions(column_types = dict_types,
+                                          include_columns = my_cols)
+            # is a dataset object that can be turned into a table
+            # but we can also filter immediately if we like
+            pa_my = pads.dataset(csv.read_csv(filename,
+                                              parse_options = parse_opt,
+                                              convert_options=conv_opt))
+
+            if list_stores is None:
+                pa_tab = aux_clean(pa_my.to_table(), add_dates)
+            else:
+                pa_tab = aux_clean(pa_my.to_table(filter=pads.field('store_code_uc').isin(list_stores)), add_dates)
+
+            if agg_function:
+                return agg_function(pa_tab, **kwargs)
+            else:
+                return pa_tab
+
+        # read all the modules (and groups) for one year
+        def aux_read_year(year, add_dates, agg_function=None, **kwargs):
+            # get the list of stores that were present in the year of choice
+            # CC: can we keep this as pa.Array()?
+            list_stores = self.df_stores['store_code_uc'].filter(pc.equal(self.df_stores['panel_year'],year)).to_pylist()
+
+            pa_y = pa.concat_tables([aux_read_mod_year(f, list_stores, add_dates, agg_function, **kwargs)
+                                     for f in self.dict_sales[year]
+                                     ])
+
+            # still a table object, not a pandas dataframe
+            # since we will be concatenating years together, presumably?
+            return pa_y
+
         if self.verbose == True:
             print('Reading Sales')
             tick()
         
         
         # This does the work -- keep as PyArrow table
-        if agg_function:
-            self.df_sales = pa.concat_tables([agg_function(aux_clean(aux_read_year(y, incl_promo), add_dates), **kwargs) for y in self.dict_sales.keys()])
-        else:
-            self.df_sales = pa.concat_tables([aux_clean(aux_read_year(y, incl_promo), add_dates) for y in self.dict_sales.keys()])
+        self.df_sales = pa.concat_tables([aux_read_year(y, add_dates, agg_function, **kwargs) for y in self.dict_sales.keys()])
         
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
 
