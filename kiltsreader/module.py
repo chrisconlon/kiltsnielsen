@@ -1388,9 +1388,9 @@ class PanelReader(object):
         #self.df_products = self.df_products[self.df_products.upc.isin(pa.concat_tables(self.df_purchases).select(['upc'])['upc'].to_numpy())]
 
         print('Concatenating Tables...')
-        self.df_trips = pa.concat_tables(self.df_trips, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
-        self.df_purchases = pa.concat_tables(self.df_purchases, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
-        self.df_panelists = pa.concat_tables(self.df_panelists, promote=True)#.to_pandas(self_destruct=True, split_blocks=True)
+        self.df_trips = pa.concat_tables(self.df_trips, promote_options='default')#.to_pandas(self_destruct=True, split_blocks=True)
+        self.df_purchases = pa.concat_tables(self.df_purchases, promote_options='default')#.to_pandas(self_destruct=True, split_blocks=True)
+        self.df_panelists = pa.concat_tables(self.df_panelists, promote_options='default')#.to_pandas(self_destruct=True, split_blocks=True)
 
         return
 
