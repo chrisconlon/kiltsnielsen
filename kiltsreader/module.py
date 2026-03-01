@@ -243,8 +243,9 @@ class TgzFileManager:
 
     def __init__(self, dir_read):
         self.dir_read = dir_read
+        # Search for .tgz files in dir_read and one level deep
         self.tgz_files = sorted(set(
-            list(dir_read.glob('*.tgz')) + list(dir_read.glob('**/*.tgz'))
+            list(dir_read.glob('*.tgz')) + list(dir_read.glob('*/*.tgz'))
         ))
         self._archive_map = {}  # maps virtual Path -> (tgz_path, member_name)
 
@@ -252,12 +253,25 @@ class TgzFileManager:
     def has_archives(self):
         return len(self.tgz_files) > 0
 
-    def get_archive_files(self):
+    def get_archive_files(self, data_type=None):
         """Enumerate TSV/CSV files inside all .tgz archives.
         Returns a list of virtual Path objects that can be used as keys.
+
+        Args:
+            data_type: 'RMS' to only scan scanner archives, 'HMS' to only scan
+                       panel archives, or None to scan all.
         """
         virtual_files = []
         for tgz_path in self.tgz_files:
+            # Skip archives that are clearly the wrong data type
+            tgz_name = tgz_path.name.lower()
+            if data_type == 'RMS' and ('panel' in tgz_name or 'consumer' in tgz_name):
+                continue
+            if data_type == 'HMS' and 'panel' not in tgz_name and 'consumer' not in tgz_name and 'master' not in tgz_name:
+                continue
+            # Skip reference/documentation archives
+            if 'reference' in tgz_name or 'documentation' in tgz_name:
+                continue
             with tarfile.open(tgz_path, 'r:gz') as tar:
                 for member in tar.getmembers():
                     if not member.isfile():
@@ -289,6 +303,11 @@ class TgzFileManager:
         return extracted
 
 
+def _is_master_files(name):
+    """Check if a directory name is a Master_Files variant (e.g. Master_Files, Master_Files_2006-2020)."""
+    return name == 'Master_Files' or name.startswith('Master_Files_')
+
+
 def _read_csv(self, filepath, **kwargs):
     """Read a CSV/TSV file, transparently handling .tgz archive members.
     Falls back to standard csv.read_csv for normal file paths.
@@ -303,17 +322,38 @@ def _read_csv(self, filepath, **kwargs):
     return csv.read_csv(filepath, **kwargs)
 
 
+def _has_data_files(files):
+    """Check if file list contains Nielsen data files (not just stray docs)."""
+    data_dirs = {'Movement_Files', 'Annual_Files', 'Master_Files'}
+    for f in files:
+        parts = set(f.parts)
+        if parts & data_dirs:
+            return True
+        # Also match Master_Files_YYYY-YYYY variants
+        if any(_is_master_files(p) for p in f.parts):
+            return True
+    return False
+
+
 def get_files(self):
     """Get all TSV/CSV files for a PanelReader or RetailReader object.
     Searches extracted directories first, then .tgz archives if none found.
+    Falls back to .tgz if extracted files don't contain expected data directories.
     """
     files = [i for i in self.dir_read.glob('**/*.*sv') if '._' not in i.stem]
 
-    if len(files) == 0:
+    # Determine data type for archive filtering
+    data_type = 'RMS' if isinstance(self, RetailReader) else 'HMS'
+
+    if len(files) == 0 or not _has_data_files(files):
         # Try .tgz archives
         self._tgz_manager = TgzFileManager(self.dir_read)
         if self._tgz_manager.has_archives:
-            files = self._tgz_manager.get_archive_files()
+            archive_files = self._tgz_manager.get_archive_files(data_type=data_type)
+            if archive_files:
+                files = files + archive_files
+            else:
+                self._tgz_manager = None
         else:
             self._tgz_manager = None
     else:
@@ -539,7 +579,7 @@ class RetailReader(object):
         self.files_product = [f for f in self.files if
                               (f.name == 'products.tsv')&
                               (f.parent.name == 'Latest')&
-                              (f.parent.parent.name == 'Master_Files')]
+                              _is_master_files(f.parent.parent.name)]
 
         # Collect the Annual Files NOTE: currently unused
         self.files_annual = [f for f in self.files
@@ -1115,7 +1155,7 @@ class PanelReader(object):
 
         # locate the common master files
         self.files_master = [f for f in self.files
-                             if f.parts[-3] == 'Master_Files']
+                             if _is_master_files(f.parts[-3])]
 
         self.files_annual = [f for f in self.files
                              if f.parts[-2] == 'Annual_Files']
@@ -1123,14 +1163,14 @@ class PanelReader(object):
         self.files_product = [f for f in self.files if
                               (f.name == 'products.tsv')&
                               (f.parent.name == 'Latest')&
-                              (f.parent.parent.name == 'Master_Files')&
+                              _is_master_files(f.parent.parent.name)&
                               ('Revised_Panelist_Files' not in f.parts)
                               ]
 
         self.files_variations = [f for f in self.files if
                                  (f.name == 'brand_variations.tsv')&
                                  (f.parent.name == 'Latest')&
-                                 (f.parent.parent.name == 'Master_Files')&
+                                 _is_master_files(f.parent.parent.name)&
                                  ('Revised_Panelist_Files' not in f.parts)
                                  ]
 
@@ -1138,7 +1178,7 @@ class PanelReader(object):
         self.files_retailers = [f for f in self.files if
                                 (f.name == 'retailers.tsv')&
                                 (f.parent.name == 'Latest')&
-                                (f.parent.parent.name == 'Master_Files') &
+                                _is_master_files(f.parent.parent.name) &
                                 ('Revised_Panelist_Files' not in f.parts)
                                 ]
 
