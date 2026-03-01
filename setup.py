@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -21,6 +21,6 @@ setup(
         "Operating System :: OS Independent",
     ],
     packages=['kiltsreader'],
-    install_requires=['pyarrow >= 5.0.0','pandas >= 1.2','numpy>= 1.2'],
-    python_requires='>=3.6',
+    install_requires=['pyarrow >= 17.0.0', 'pandas >= 1.5', 'numpy >= 1.23'],
+    python_requires='>=3.9',
 )

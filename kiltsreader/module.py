@@ -28,18 +28,17 @@ See Example.py for implementation of the RetailReader and PanelReader functions
 
 # %% Initial Methods and Packages
 import time
+import tarfile
+import warnings
 import pandas as pd
 import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as pads
 import pyarrow.parquet as pq
 import pyarrow.compute as pc
-from pyarrow import csv # Sometimes does not load properly, load separately
+from pyarrow import csv
 
 import pathlib as path
-
-
-import time
 
 _start_time = time.time()
 def tick():
@@ -131,24 +130,176 @@ dict_types = {'upc': pa.uint64(),
               }
 
 
-dict_column_map = {'Household_Cd':'household_code',
-                   'Panel_Year':'panel_year'}
+# Column renames applied to panelist data
+# Extend this mapping if NielsenIQ changes column naming conventions
+COLUMN_RENAME_MAP = {'Household_Cd': 'household_code',
+                     'Panel_Year': 'panel_year'}
+# Keep backward compat alias
+dict_column_map = COLUMN_RENAME_MAP
 
-# function to get all files within a folder
-# NOTE: might be common to both
-def get_files(self):
+# Expected column sets for format validation
+# If NielsenIQ changes column names, update these sets and dict_types above
+EXPECTED_PRODUCT_COLS = {
+    'upc', 'upc_ver_uc', 'upc_descr', 'product_module_code',
+    'product_module_descr', 'product_group_code', 'product_group_descr',
+    'department_code', 'department_descr', 'brand_code_uc', 'brand_descr',
+    'multi', 'size1_code_uc', 'size1_amount', 'size1_units',
+    'dataset_found_uc', 'size1_change_flag_uc'
+}
+
+EXPECTED_SALES_COLS = {
+    'store_code_uc', 'upc', 'week_end', 'units', 'prmult', 'price',
+    'feature', 'display'
+}
+
+EXPECTED_STORE_COLS = {
+    'store_code_uc', 'year', 'parent_code', 'retailer_code',
+    'channel_code', 'store_zip3', 'fips_state_code', 'fips_state_descr',
+    'fips_county_code', 'fips_county_descr', 'dma_code', 'dma_descr'
+}
+
+EXPECTED_RMS_COLS = {'upc', 'upc_ver_uc', 'panel_year'}
+
+EXPECTED_PANELIST_COLS = {
+    'Household_Cd', 'Panel_Year', 'Projection_Factor',
+    'Household_Income', 'Fips_State_Desc', 'DMA_Cd'
+}
+
+EXPECTED_TRIP_COLS = {
+    'trip_code_uc', 'household_code', 'store_code_uc', 'purchase_date'
+}
+
+EXPECTED_PURCHASE_COLS = {
+    'trip_code_uc', 'upc', 'upc_ver_uc', 'quantity'
+}
+
+
+def _validate_columns(actual_columns, expected_columns, file_description="file"):
+    """Warn about missing or unexpected columns in a data file.
+    Helps detect NielsenIQ format changes early.
     """
-    Input: RetailReader or PanelReader object        
-    Get all Files for a PanelReader or RetailReader object
+    actual = set(actual_columns)
+    expected = set(expected_columns)
+    missing = expected - actual
+    unexpected = actual - expected
+
+    if missing:
+        warnings.warn(
+            f"Expected columns missing from {file_description}: {missing}. "
+            "This may indicate a NielsenIQ format change.",
+            UserWarning, stacklevel=3)
+    if unexpected:
+        warnings.warn(
+            f"Unexpected columns in {file_description}: {unexpected}. "
+            "This may indicate a NielsenIQ format change. "
+            "These columns will still be read but type casting may not apply.",
+            UserWarning, stacklevel=3)
+    return missing, unexpected
+
+
+def _safe_convert_options(actual_columns=None, **kwargs):
+    """Create ConvertOptions with column_types restricted to columns that exist.
+    Prevents errors when data files contain unexpected columns.
+    """
+    column_types = kwargs.pop('column_types', dict_types)
+    if actual_columns is not None:
+        column_types = {k: v for k, v in column_types.items()
+                        if k in actual_columns}
+    return csv.ConvertOptions(column_types=column_types, **kwargs)
+
+
+class TgzFileManager:
+    """Manages transparent reading of TSV/CSV files from .tgz archives.
+
+    When Nielsen data is provided as .tgz files (as downloaded from Kilts),
+    this class enumerates archive contents and provides file-like objects
+    for reading without extracting to disk.
+    """
+
+    def __init__(self, dir_read):
+        self.dir_read = dir_read
+        self.tgz_files = sorted(set(
+            list(dir_read.glob('*.tgz')) + list(dir_read.glob('**/*.tgz'))
+        ))
+        self._archive_map = {}  # maps virtual Path -> (tgz_path, member_name)
+
+    @property
+    def has_archives(self):
+        return len(self.tgz_files) > 0
+
+    def get_archive_files(self):
+        """Enumerate TSV/CSV files inside all .tgz archives.
+        Returns a list of virtual Path objects that can be used as keys.
+        """
+        virtual_files = []
+        for tgz_path in self.tgz_files:
+            with tarfile.open(tgz_path, 'r:gz') as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    name_lower = member.name.lower()
+                    if not (name_lower.endswith('.tsv') or name_lower.endswith('.csv')):
+                        continue
+                    # Skip macOS resource fork files
+                    base = path.Path(member.name).stem
+                    if base.startswith('._') or '/._' in member.name:
+                        continue
+                    virtual_path = self.dir_read / member.name
+                    self._archive_map[virtual_path] = (tgz_path, member.name)
+                    virtual_files.append(virtual_path)
+        return virtual_files
+
+    def open_file(self, virtual_path):
+        """Return a binary file-like object for a file inside an archive.
+        Returns None if the path is not an archive member.
+        """
+        if virtual_path not in self._archive_map:
+            return None
+        tgz_path, member_name = self._archive_map[virtual_path]
+        tar = tarfile.open(tgz_path, 'r:gz')
+        member = tar.getmember(member_name)
+        extracted = tar.extractfile(member)
+        # Keep a reference to the tar so it's not garbage collected
+        extracted._tar_ref = tar
+        return extracted
+
+
+def _read_csv(self, filepath, **kwargs):
+    """Read a CSV/TSV file, transparently handling .tgz archive members.
+    Falls back to standard csv.read_csv for normal file paths.
+    """
+    if hasattr(self, '_tgz_manager') and self._tgz_manager is not None:
+        file_obj = self._tgz_manager.open_file(filepath)
+        if file_obj is not None:
+            try:
+                return csv.read_csv(pa.PythonFile(file_obj), **kwargs)
+            finally:
+                file_obj.close()
+    return csv.read_csv(filepath, **kwargs)
+
+
+def get_files(self):
+    """Get all TSV/CSV files for a PanelReader or RetailReader object.
+    Searches extracted directories first, then .tgz archives if none found.
     """
     files = [i for i in self.dir_read.glob('**/*.*sv') if '._' not in i.stem]
+
     if len(files) == 0:
-        str_err= ('Found no files! Check folder name ' +
-        'and make sure folder is unzipped.')
-        raise Exception(str_err)
+        # Try .tgz archives
+        self._tgz_manager = TgzFileManager(self.dir_read)
+        if self._tgz_manager.has_archives:
+            files = self._tgz_manager.get_archive_files()
+        else:
+            self._tgz_manager = None
+    else:
+        self._tgz_manager = None
+
+    if len(files) == 0:
+        raise FileNotFoundError(
+            f"Found no TSV/CSV files in {self.dir_read}. "
+            "Check folder name and make sure folder is unzipped, "
+            "or provide .tgz archive files.")
     return files
-    # NOTE: CC had the condition # if '._' in i.stem
-    # i will remove that conditioning for now
 
 
 
@@ -184,70 +335,66 @@ def get_products(self, upc_list=None,
                  keep_modules = None, drop_modules = None,
                  keep_departments = None, drop_departments = None):
     """
-    Arguments: 
+    Arguments:
         Required: RetailReader or PanelReader object
-        Optional: keep_groups, drop_groups, keep_modules, drop_modules
-        Each takes a list of group codes or module codes
+        Optional: keep_groups, drop_groups, keep_modules, drop_modules,
+                  keep_departments, drop_departments, upc_list
+        Each takes a list of group codes, module codes, department codes, or UPCs
 
     Select the Product file and read it in
     Common to both the Retail Reader and Panel Reader files
-    Many Filter Options:
-    upc_list: a list of integer UPCs to select, ignores versioning by Nielsen
-    keep_groups, drop_groups: selects or drops product group codes
-    keep_modules, drop_modules: selects or drops product module codes
     """
     if self.files_product:
         self.file_products = self.files_product[0]
     else:
-        str_err = ('Could not find a valid products.tsv under ',
-                   'Master_Files/Latest. Check folder name ',
-                   'and make sure folder is unzipped.')
-        raise Exception(str_err)
-
+        raise FileNotFoundError(
+            f"Could not find products.tsv under Master_Files/Latest in {self.dir_read}. "
+            "Check folder name and make sure folder is unzipped.")
 
     read_opt = csv.ReadOptions(encoding='latin')
     parse_opt = csv.ParseOptions(delimiter = '\t')
     conv_opt = csv.ConvertOptions(column_types = dict_types)
-    df_products = csv.read_csv(self.file_products,
+    df_products = _read_csv(self, self.file_products,
                            read_options = read_opt,
                            parse_options = parse_opt,
-                           convert_options = conv_opt).to_pandas()
+                           convert_options = conv_opt)
+
+    _validate_columns(df_products.column_names, EXPECTED_PRODUCT_COLS, "products.tsv")
+
+    # Apply filters using Arrow compute
+    my_filter = pc.greater(df_products['upc'], 0)  # base filter (always true)
+
     if keep_groups:
-        mask_kg = df_products['product_group_code'].isin(keep_groups)
-        df_products = df_products[mask_kg]
+        my_filter = pc.and_(my_filter, pc.is_in(df_products['product_group_code'],
+                            value_set=pa.array(keep_groups, pa.uint16())))
     if drop_groups:
-        mask_dg = ~df_products['product_group_code'].isin(drop_groups)
-        df_products = df_products[mask_dg]
+        my_filter = pc.and_not(my_filter, pc.is_in(df_products['product_group_code'],
+                               value_set=pa.array(drop_groups, pa.uint16())))
     if keep_modules:
-        mask_km = df_products['product_module_code'].isin(keep_modules)
-        df_products = df_products[mask_km]
+        my_filter = pc.and_(my_filter, pc.is_in(df_products['product_module_code'],
+                            value_set=pa.array(keep_modules, pa.uint16())))
     if drop_modules:
-        mask_dm = ~df_products['product_module_code'].isin(drop_modules)
-        df_products = df_products[mask_dm]
+        my_filter = pc.and_not(my_filter, pc.is_in(df_products['product_module_code'],
+                               value_set=pa.array(drop_modules, pa.uint16())))
     if keep_departments:
-        mask_kd = df_products['department_code'].isin(keep_departments)
-        df_products = df_products[mask_kd]
+        my_filter = pc.and_(my_filter, pc.is_in(df_products['department_code'],
+                            value_set=pa.array(keep_departments, pa.uint16())))
     if drop_departments:
-        mask_dd = ~df_products['department_code'].isin(drop_departments)
-        df_products = df_products[mask_dd]
+        my_filter = pc.and_not(my_filter, pc.is_in(df_products['department_code'],
+                               value_set=pa.array(drop_departments, pa.uint16())))
+    if upc_list:
+        my_filter = pc.and_(my_filter, pc.is_in(df_products['upc'],
+                            value_set=pa.array(upc_list, pa.uint64())))
 
+    df_products = df_products.filter(my_filter)
 
+    # Sort by UPC
+    df_products = df_products.sort_by('upc')
+    self.df_products = df_products
 
-    df_products['size1_units'] = df_products['size1_units'].astype('category')
-    df_products['product_module_descr'] = df_products['product_module_descr'].astype('category')
-    df_products['product_group_code'] = df_products['product_group_code'].astype('category')
+    if self.verbose:
+        print('Successfully Read in Products with', df_products.num_rows, 'rows')
 
-    if upc_list: # if you want to trim more explicitly
-        df_products = df_products[df_products['upc'].isin(upc_list)]
-
-
-    df_products = df_products.sort_values(['upc']).reset_index(drop=True)
-    self.df_products = df_products.copy()
-
-    if self.verbose == True:
-        print('Successfully Read in Products with Shape ', df_products.shape)
-
-    del(df_products)
     return
 
 
@@ -286,13 +433,7 @@ def get_extra(self, years = None, upc_list = None):
     
     See Nielsen documentation for a full description of these variables.
     """
-    # read in the extra files
-
-
-    ## just do it for all years by default
-    # but given the overwriting aspect, maybe you want a specific year
-    # i won't judge
-    if years == None:
+    if years is None:
         years = self.all_years
 
     files_extra_in = [f for f in self.files_extra
@@ -301,40 +442,37 @@ def get_extra(self, years = None, upc_list = None):
     def aux_read_extra_year(filename):
         conv_opt = csv.ConvertOptions(column_types = dict_types)
         parse_opt = csv.ParseOptions(delimiter='\t')
-
-        pa_ex_y = pads.dataset(csv.read_csv(filename,
-                                            parse_options = parse_opt,
-                                            convert_options = conv_opt))
-
-        return pa_ex_y.to_table()
+        return _read_csv(self, filename,
+                         parse_options = parse_opt,
+                         convert_options = conv_opt)
 
     df_extra = pa.concat_tables([aux_read_extra_year(f)
-                                 for f in files_extra_in]).to_pandas()
+                                 for f in files_extra_in])
 
     if upc_list:
-        df_extra = df_extra[df_extra['upc'].isin(upc_list)]
+        df_extra = df_extra.filter(
+            pc.is_in(df_extra['upc'], value_set=pa.array(upc_list, pa.uint64())))
 
-    df_extra = df_extra.sort_values(['upc', 'panel_year']).reset_index(drop=True)
+    df_extra = df_extra.sort_by([('upc', 'ascending'), ('panel_year', 'ascending')])
+    self.df_extra = df_extra
 
-    self.df_extra = df_extra.copy()
-    # not going to edit the missings or anything of the sort
-    if self.verbose == True:
-        print('Successfully Read in Extra Files with Shape', df_extra.shape)
+    if self.verbose:
+        print('Successfully Read in Extra Files with', df_extra.num_rows, 'rows')
 
-    # sort by UPC
     return
 
 def aux_write_direct(df, filename, compr = 'brotli'):
-    #print(filename)
     if isinstance(df, pa.Table):
+        if df.num_rows == 0:
+            return
         pq.write_table(df, filename, compression = compr)
         print('Wrote as direct parquet to', filename)
-    if isinstance(df, pd.DataFrame):
+    elif isinstance(df, pd.DataFrame):
         if df.empty:
             return
-        else:
-            df.to_parquet(filename, compression = compr)
-            print('Wrote as direct parquet to', filename)
+        pq.write_table(pa.Table.from_pandas(df, preserve_index=False),
+                        filename, compression = compr)
+        print('Wrote as direct parquet to', filename)
     return
 
 # %%
@@ -387,32 +525,33 @@ class RetailReader(object):
         self.files_sales = [f for f in self.files
                             if 'Movement_Files' in f.parts]
         if not self.files_sales:
-            str_err = 'Could not find Movement Files!'
-            raise Exception(str_err)
+            raise FileNotFoundError(
+                f"Could not find Movement Files in {dir_read}. "
+                "Check folder structure.")
 
         # Collect groups, modules, and years represented in the sales files
         # throws errors if the files were renamed from the original structure
         # NOTE these will be automatically sorted, it seems
         try:
             self.all_groups = set(self.get_group(f) for f in self.files_sales)
-        except:
-            str_err = ('Could not get Group Code from Movement Files. ',
-                       'Use original Nielsen naming conventions')
-            raise Exception(str_err)
+        except Exception as e:
+            raise ValueError(
+                f"Could not get Group Code from Movement Files in {dir_read}. "
+                f"Use original Nielsen naming conventions. Error: {e}") from e
 
         try:
             self.all_modules = set(self.get_module(f) for f in self.files_sales)
-        except:
-            str_err = ('Could not get Module Code from Movement Files. ',
-                       'Use original Nielsen naming conventions')
-            raise Exception(str_err)
-        
+        except Exception as e:
+            raise ValueError(
+                f"Could not get Module Code from Movement Files in {dir_read}. "
+                f"Use original Nielsen naming conventions. Error: {e}") from e
+
         try:
             self.all_years = set(get_year(f) for f in self.files_sales)
-        except:
-            str_err = ('Could not get Year from Movement Files. ',
-                       'Use original Nielsen naming conventions')
-            raise Exception(str_err)
+        except Exception as e:
+            raise ValueError(
+                f"Could not get Year from Movement Files in {dir_read}. "
+                f"Use original Nielsen naming conventions. Error: {e}") from e
 
 
         # Collect the Stores, RMS, and Extra Files (the Annual Files)
@@ -573,11 +712,13 @@ class RetailReader(object):
         conv_opt = csv.ConvertOptions(column_types = dict_types)
 
         self.df_rms = pa.concat_tables(
-            [csv.read_csv(self.dict_rms[y], parse_options = parse_opt, convert_options = conv_opt)
+            [_read_csv(self, self.dict_rms[y], parse_options = parse_opt, convert_options = conv_opt)
              for y in self.dict_rms.keys()]
             )
 
-        if self.verbose == True:
+        _validate_columns(self.df_rms.column_names, EXPECTED_RMS_COLS, "rms_versions")
+
+        if self.verbose:
             print('Successfully Read in the RMS Files')
         return
 
@@ -669,12 +810,14 @@ class RetailReader(object):
         parse_opt = csv.ParseOptions(delimiter = '\t')
         conv_opt = csv.ConvertOptions(column_types = dict_types)
         # renaming the year column for easier merging later on
-        tab_stores = pa.concat_tables([csv.read_csv(f,
+        tab_stores = pa.concat_tables([_read_csv(self, f,
                                                    parse_options = parse_opt,
                                                    convert_options = conv_opt
                                                    )
                                       for f in self.dict_stores.values()]
                                      )
+
+        _validate_columns(tab_stores.column_names, EXPECTED_STORE_COLS, "stores")
 
         # harmonize the column name for years
         my_dict = {'year':'panel_year'}
@@ -811,7 +954,7 @@ class RetailReader(object):
                                           include_columns = my_cols)
             # is a dataset object that can be turned into a table
             # but we can also filter immediately if we like
-            pa_my = pads.dataset(csv.read_csv(filename,
+            pa_my = pads.dataset(_read_csv(self, filename,
                                               parse_options = parse_opt,
                                               convert_options=conv_opt))
 
@@ -862,38 +1005,31 @@ class RetailReader(object):
 
         # Filter products for only those in sales data
         if 'upc' in self.df_sales.column_names:
-            self.df_products = self.df_products[self.df_products.upc.isin(pc.unique(self.df_sales['upc']).to_numpy())]
+            sales_upcs = pc.unique(self.df_sales['upc'])
+            if isinstance(self.df_products, pa.Table):
+                self.df_products = self.df_products.filter(
+                    pc.is_in(self.df_products['upc'], value_set=sales_upcs))
+            else:
+                self.df_products = self.df_products[
+                    self.df_products.upc.isin(sales_upcs.to_numpy())]
 
-        return 
+        return
 
     def write_data(self, dir_write = path.Path.cwd(), stub = 'out',
-                   compr = 'brotli', as_arrow = False,
+                   compr = 'brotli', as_table = False,
                    separator = 'panel_year'):
 
         """
-        Function: writes pandas dataframes to parquets
-        Arguments: optional: dir_write: Path
-        stub: default 'out'
-        compression type: detault 'nbrotli'
-        as_arrow: if you want to use the pyarrow separated dataset,
-        then set to True
-        separator: column on which to separate rows for the pyarrow Table feature
+        Function: writes data to parquet files
+        Arguments:
+            dir_write: Path to output directory (default: cwd)
+            stub: prefix for output filenames (default: 'out')
+            compr: compression type (default: 'brotli')
+            as_table: if True, writes sales as a partitioned parquet dataset
+            separator: column on which to partition when as_table=True
 
-        Requires a directory to write to; otherwise will use current 
-        working directory
-        Can also include a stub, to save files as [stub]_[data].parquet
         Note: will save all non-empty datasets
         i.e. any datasets for which the read* method has been applied
-
-        Can be saved intermediately as a pyarrow Table, with separators,
-        Not yet: option for different separators for different files
-
-        If you are looking to save just a single file with a specific separator
-        RR.read_XXX()
-        RR.write_data(dir_write, separator = XXX)
-
-        Always saves as parquets with compression of your choice
-        (default: brotli)
         """
 
         # most important: define a writing directory
@@ -908,54 +1044,20 @@ class RetailReader(object):
         f_products = self.dir_write / '{stub}_products.parquet'.format(stub=stub)
         f_extra = self.dir_write /'{stub}_extra.parquet'.format(stub=stub)
 
-        # def aux_write_separated(df, filename, separator = 'dma_code',
-        #                     compr = 'brotli'):
-        #     if df.empty:
-        #         return
-        #     if not separator in df:
-        #         #print(filename)
-        #         if self.verbose == True:
-        #             print('Separator not found in DataFrame. Writing directly')
-        #         aux_write_direct(df, filename)
-        #         return
+        aux_write_direct(self.df_stores, f_stores, compr=compr)
+        aux_write_direct(self.df_products, f_products, compr=compr)
+        aux_write_direct(self.df_extra, f_extra, compr=compr)
 
-        #     # get a list of separators
-        #     seps = df[separator].unique()
-        #     # separate the DataFrames
-        #     dfs_sep = [df[df[separator] == sep] for sep in seps]
-
-        #     # get the writer object from the first spearated dataframe
-        #     table0 = pa.Table.from_pandas(dfs_sep[0])
-        #     writer = pq.ParquetWriter(filename, table0.schema,
-        #                               compression = compr)
-        #     for df in dfs_sep:
-        #         table = pa.Table.from_pandas(df)
-        #         writer.write_table(table)
-        #     writer.close()
-
-        #     if self.verbose == True:
-        #         print('Wrote Data to {d} with stub {s} and row groups {sep}'.format(d=dir_write, s=stub, sep=separator))
-
-        #     return
-
-        # only separate the sales file
-        aux_write_direct(self.df_stores, f_stores)
-        aux_write_direct(self.df_products, f_products)
-        aux_write_direct(self.df_extra, f_extra)
-
-        if as_arrow == False:
-            self.df_sales = self.df_sales.to_pandas()
-            aux_write_direct(self.df_sales, f_sales)
+        if as_table == False:
+            aux_write_direct(self.df_sales, f_sales, compr=compr)
         else:
-            dir_sales = self.dir_write /'{stub}_sales'.format(stub=stub)
+            dir_sales = self.dir_write / '{stub}_sales'.format(stub=stub)
 
-            # this is awkward but readable
-            pq.write_to_dataset(self.df_sales, version='2.6', 
-                root_path=dir_sales, use_legacy_dataset=True,
-                partition_cols=['dma_code'], compression='brotli')
+            pq.write_to_dataset(self.df_sales,
+                root_path=dir_sales,
+                partition_cols=[separator],
+                compression=compr)
 
-            # this gives a bus error on read -- wait for PyArrow update
-            #pads.write_dataset(self.df_sales, dir_sales, format="parquet", partitioning=separator, existing_data_behavior='overwrite_or_ignore')
             if self.verbose == True:
                 print('Wrote Dataset to {d} and partition {sep}'.format(d=dir_sales, sep=separator))
         return
@@ -1018,16 +1120,15 @@ class PanelReader(object):
 
 
         if not self.files_annual:
-            str_err = ('Could not find Annual Files ',
-                       '(panelists, purchases, trips)')
-            raise Exception(str_err)
+            raise FileNotFoundError(
+                f"Could not find Annual Files (panelists, purchases, trips) in {dir_read}.")
 
         try:
             self.all_years = set([get_year(x) for x in self.files_annual])
-        except:
-            str_err = ('Could not get year from Movement files. ',
-                       'Keep original Nielsen file structure.')
-            raise Exception(str_err)
+        except Exception as e:
+            raise ValueError(
+                f"Could not get year from Annual files in {dir_read}. "
+                f"Keep original Nielsen file structure. Error: {e}") from e
 
         # then, partition into panelists, extra, purchases, and trips
         # note that extra is EXACTLY the same as in
@@ -1128,22 +1229,19 @@ class PanelReader(object):
         if self.files_retailers:
             self.file_retailers = self.files_retailers[0]
         else:
-            str_err = ('Could not find a valid retailers.tsv under ',
-                       'Master_Files/Latest. Check folder name ',
-                       'and make sure folder is unzipped.')
-            raise Exception(str_err)
+            raise FileNotFoundError(
+                f"Could not find retailers.tsv under Master_Files/Latest in {self.dir_read}. "
+                "Check folder name and make sure folder is unzipped.")
         
         
 
-        df_retailers = csv.read_csv(self.file_retailers,
+        self.df_retailers = _read_csv(self, self.file_retailers,
                                read_options = read_opt,
                                parse_options = parse_opt,
-                               convert_options = conv_opt).to_pandas()
+                               convert_options = conv_opt)
 
-        self.df_retailers = df_retailers.copy()
-
-        if self.verbose == True:
-            print('Successfully Read in Retailers with Shape', df_retailers.shape)
+        if self.verbose:
+            print('Successfully Read in Retailers with', self.df_retailers.num_rows, 'rows')
 
         return
 
@@ -1240,21 +1338,19 @@ class PanelReader(object):
         if self.files_variations:
             self.file_variations = self.files_variations[0]
         else:
-            str_err = ('Could not find a valid brand_variations.tsv under ',
-                       'Master_Files/Latest. Check folder name ',
-                       'and make sure folder is unzipped.')
-            raise Exception(str_err)
+            raise FileNotFoundError(
+                f"Could not find brand_variations.tsv under Master_Files/Latest in {self.dir_read}. "
+                "Check folder name and make sure folder is unzipped.")
         
         
         
-        df_variations = csv.read_csv(self.file_variations,
+        self.df_variations = _read_csv(self, self.file_variations,
                                read_options = read_opt,
                                parse_options = parse_opt,
-                               convert_options = conv_opt).to_pandas()
-        
-        self.df_variations = df_variations.copy()
+                               convert_options = conv_opt)
 
-        print('Successfully Read in Brand Variations with Shape', df_variations.shape)
+        if self.verbose:
+            print('Successfully Read in Brand Variations with', self.df_variations.num_rows, 'rows')
 
         return
 
@@ -1271,27 +1367,25 @@ class PanelReader(object):
 
         """
         try:
-            f_trips = self.dict_trips[year][0] # should only be one per year
-        except:
-            str_err = ('Could not find trip file for year', year)
-            raise Exception(str_err)
+            f_trips = self.dict_trips[year][0]
+        except (KeyError, IndexError) as e:
+            raise FileNotFoundError(f"Could not find trip file for year {year}") from e
 
         try:
             f_purchases = self.dict_purchases[year][0]
-        except:
-            str_err = ('Could not find purchases file for year', year)
-            raise Exception(str_err)
+        except (KeyError, IndexError) as e:
+            raise FileNotFoundError(f"Could not find purchases file for year {year}") from e
+
         try:
             f_panelists = self.dict_panelists[year][0]
-        except:
-            str_err = ('Could not find panelists file for year', year)
-            raise Exception(str_err)
+        except (KeyError, IndexError) as e:
+            raise FileNotFoundError(f"Could not find panelists file for year {year}") from e
 
         parse_opt = csv.ParseOptions(delimiter = '\t')
         conv_opt = csv.ConvertOptions(column_types = dict_types,
                                       auto_dict_encode = True,
                                       auto_dict_max_cardinality = 1024)
-        ds_panelists = pads.dataset(csv.read_csv(f_panelists,
+        ds_panelists = pads.dataset(_read_csv(self, f_panelists,
                                                  parse_options = parse_opt,
                                                  convert_options = conv_opt))
 
@@ -1309,13 +1403,12 @@ class PanelReader(object):
         if drop_dmas:
             panelist_filter = panelist_filter & (~pads.field('DMA_Cd').isin(drop_dmas))
 
-        # Get the Panelist Table Filtered and as a DataFrame
+        # Get the Panelist Table Filtered
         df_panelists = ds_panelists.to_table(filter = panelist_filter)
+        _validate_columns(df_panelists.column_names, EXPECTED_PANELIST_COLS,
+                          f"panelists ({year})")
         col_names = [x if x not in dict_column_map else dict_column_map[x] for x in df_panelists.column_names]
         df_panelists = df_panelists.rename_columns(col_names)
-
-        #.to_pandas()
-        #df_panelists = df_panelists.rename(columns = dict_column_map)
 
         # Get a list of Unique HH
         trip_filter = pads.field('household_code').isin(pc.unique(df_panelists['household_code']).to_pylist())
@@ -1323,18 +1416,28 @@ class PanelReader(object):
         if keep_stores:
             trip_filter = trip_filter & pads.field('store_code_uc').isin(keep_stores)
 
-        df_trips = pads.dataset(csv.read_csv(f_trips,
+        df_trips = pads.dataset(_read_csv(self, f_trips,
                     parse_options = parse_opt,
                     convert_options = conv_opt)
                     ).to_table(filter = trip_filter)
+        _validate_columns(df_trips.column_names, EXPECTED_TRIP_COLS,
+                          f"trips ({year})")
+
+        # Get unique UPCs from products (handles both Arrow Table and pandas)
+        if isinstance(self.df_products, pa.Table):
+            unique_upcs = pc.unique(self.df_products['upc']).to_pylist()
+        else:
+            unique_upcs = self.df_products['upc'].unique().tolist()
 
         purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy())) &\
-                          (pads.field('upc').isin(self.df_products.upc.unique()))
+                          (pads.field('upc').isin(unique_upcs))
 
-        ds_purchases = pads.dataset(csv.read_csv(f_purchases,
+        ds_purchases = pads.dataset(_read_csv(self, f_purchases,
                     parse_options = parse_opt,
                     convert_options = conv_opt))\
                     .to_table(filter = purchase_filter)
+        _validate_columns(ds_purchases.column_names, EXPECTED_PURCHASE_COLS,
+                          f"purchases ({year})")
 
         df_purchases = ds_purchases.append_column('panel_year', pa.array([year]*ds_purchases.num_rows,pa.int16()))
 
@@ -1451,32 +1554,40 @@ class PanelReader(object):
     
         def aux_write_separated(df, filename, separator = 'panel_year',
                             compr = 'brotli'):
-            if df.empty:
+            # Convert pandas to Arrow if needed
+            if isinstance(df, pd.DataFrame):
+                if df.empty:
+                    return
+                df = pa.Table.from_pandas(df, preserve_index=False)
+
+            if isinstance(df, pa.Table):
+                if df.num_rows == 0:
+                    return
+                col_names = df.column_names
+            else:
                 return
-            if not separator in df:
-                #print(filename)
-                if self.verbose == True:
-                    print('Separator not found in DataFrame. Writing directly')
-                aux_write_direct(df, filename)
+
+            if separator not in col_names:
+                if self.verbose:
+                    print('Separator not found in table. Writing directly')
+                aux_write_direct(df, filename, compr)
                 return
-    
-            # get a list of separators
-            seps = df[separator].unique()
-            # separate the DataFrames
-            dfs_sep = [df[df[separator] == sep] for sep in seps]
-    
-            # get the writer object from the first spearated dataframe
-            table0 = pa.Table.from_pandas(dfs_sep[0])
+
+            # Write row groups separated by the separator column
+            seps = pc.unique(df[separator]).to_pylist()
+            table0 = df.filter(pc.equal(df[separator], seps[0]))
             writer = pq.ParquetWriter(filename, table0.schema,
                                       compression = compr)
-            for df in dfs_sep:
-                table = pa.Table.from_pandas(df)
-                writer.write_table(table)
+            writer.write_table(table0)
+            for sep_val in seps[1:]:
+                table_part = df.filter(pc.equal(df[separator], sep_val))
+                writer.write_table(table_part)
             writer.close()
-    
-            if self.verbose == True:
-                print('Wrote Data to {d} with stub {s} and row groups {sep}'.format(d=dir_write/filename, s=stub, sep=separator))
-    
+
+            if self.verbose:
+                print('Wrote Data to {f} with row groups by {sep}'.format(
+                    f=filename, sep=separator))
+
             return
     
         # can separate out the files and write them as pyarrow tables
@@ -1490,9 +1601,8 @@ class PanelReader(object):
         aux_write_separated(self.df_extra, f_extra)
 
     # Revised Panelist Files
-    # Updates the usual Panel files with the
+    # Updates the usual Panel files with the revisions
     def read_revised_panelists(self):
-
         """
         Function: corrects the panelist files using errata from the Panel files
         Every year, Nielsen has some panelists whose data they revise
@@ -1500,11 +1610,6 @@ class PanelReader(object):
         Must have already run the read_annual() function so that df_panelists
         is not an empty dataframe
         """
-
-        # Note that the panelists appear to have various issues
-        # so you should use the revised panelists if needed
-
-        # must have already run the annual files
 
         self.files_revised = [f for f in self.files if
                               f.parent.parent.parent.name == 'Revised_Panelist_Files'
@@ -1519,14 +1624,23 @@ class PanelReader(object):
                                        f for f in self.files_panelist_revised
                                        }
 
+        # Convert Arrow tables to pandas for .update() compatibility
+        # then convert back at the end
+        if isinstance(self.df_panelists, pa.Table):
+            self.df_panelists = self.df_panelists.to_pandas()
+        if isinstance(self.df_products, pa.Table):
+            self.df_products = self.df_products.to_pandas()
+        if isinstance(self.df_variations, pa.Table):
+            self.df_variations = self.df_variations.to_pandas()
+        if isinstance(self.df_retailers, pa.Table):
+            self.df_retailers = self.df_retailers.to_pandas()
+
         for year in self.all_years:
             df_panelist_rev = pd.read_csv(dict_files_panelist_revised[year],
                                           delimiter = '\t')
-            # update with the new revised files. does anything change?
-            # yes, can confirm something changes, great
             self.df_panelists.update(df_panelist_rev)
 
-        # update the other files (if they are empty, they will stay empty
+        # update the other files (if they are empty, they will stay empty)
         self.file_product_revised = [f for f in self.files_revised if
                                      'products' in f.name]
         df_products_rev = pd.read_csv(self.file_product_revised[0],
@@ -1541,7 +1655,6 @@ class PanelReader(object):
                                         engine = 'python',
                                         encoding = 'utf',
                                         quoting=3)
-        # runs into issues w/o these three lines
         self.df_variations.update(df_variations_rev)
 
         # retailers
@@ -1552,8 +1665,13 @@ class PanelReader(object):
                                        engine = 'python',
                                        encoding = 'utf',
                                        quoting=3)
+        self.df_retailers.update(df_retailers_rev)
 
-        self.df_retailers.update(self.file_retailers_revised)
+        # Convert back to Arrow tables
+        self.df_panelists = pa.Table.from_pandas(self.df_panelists, preserve_index=False)
+        self.df_products = pa.Table.from_pandas(self.df_products, preserve_index=False)
+        self.df_variations = pa.Table.from_pandas(self.df_variations, preserve_index=False)
+        self.df_retailers = pa.Table.from_pandas(self.df_retailers, preserve_index=False)
 
         return
 
@@ -1563,10 +1681,9 @@ class PanelReader(object):
 
     def process_open_issues(self):
         """
-        Function: addresses two of the curren (as of 10/01/2021) open issues
+        Function: addresses two of the current (as of 10/01/2021) open issues
         in Nielsen Panel data
         Issue 1: Flavor Code in 2010 missing
-
         Issue 2: Male Head Birth Month incorrect
         See documentation within Panel files for a description of the issues
 
@@ -1580,15 +1697,18 @@ class PanelReader(object):
 
         print('Current Open Issues:', self.open_issues)
 
+        # Convert Arrow tables to pandas for update/merge compatibility
+        if isinstance(self.df_extra, pa.Table):
+            self.df_extra = self.df_extra.to_pandas()
+        if isinstance(self.df_panelists, pa.Table):
+            self.df_panelists = self.df_panelists.to_pandas()
 
         # First, Address the ExtraAttributesFlavorCode
         if 'ExtraAttributes_FlavorCode' in self.open_issues:
             self.flavor_csv = [f for f in self.files_issues if
                                f.name == 'Latest_Flavor_2010.csv']
-    
+
             df_flavor = pd.read_csv(self.flavor_csv[0], delimiter = '\t')
-    
-            # update with df_flavor: updates in place
             self.df_extra.update(df_flavor)
 
         # Then, Address the Panelist Birth Years
@@ -1596,14 +1716,10 @@ class PanelReader(object):
             files_birth = [f for f in self.files_issues
                            if f.parent.name ==
                            'Panelist_maleHeadBirth_femaleHeadBirth']
-            # make a dictionary of these
             dict_files_birth = {2000+int(f.name[6:8]): f for f in files_birth}
-            # select just the relevant years
             dict_files_birth = {k: dict_files_birth[k]
                                 for k in dict_files_birth.keys()
                                 if k in self.all_years }
-
-            # then update the files
 
             for f in dict_files_birth:
                 f_ann = pd.read_csv(dict_files_birth[f],
@@ -1616,13 +1732,15 @@ class PanelReader(object):
                 f_ann['Female_Head_Birth'] = f_ann['Female_Head_Birth'].replace('-', np.nan)
                 f_ann['Male_Head_Birth'] = f_ann['Male_Head_Birth'].replace('-', np.nan)
 
-                # remove the month for male and female births
                 f_ann['Male_Head_Birth'] = (f_ann['Male_Head_Birth'].str[:4].fillna(-1)).astype(int)
                 f_ann['Female_Head_Birth'] = (f_ann['Female_Head_Birth'].str[:4].fillna(-1)).astype(int)
-
 
                 self.df_panelists = self.df_panelists.merge(
                     f_ann, on = ['panel_year', 'household_code'],
                     suffixes = ('', '_revised'),
                     how = 'left')
+
+        # Convert back to Arrow tables
+        self.df_extra = pa.Table.from_pandas(self.df_extra, preserve_index=False)
+        self.df_panelists = pa.Table.from_pandas(self.df_panelists, preserve_index=False)
 
