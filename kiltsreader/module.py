@@ -160,17 +160,42 @@ EXPECTED_STORE_COLS = {
 
 EXPECTED_RMS_COLS = {'upc', 'upc_ver_uc', 'panel_year'}
 
+# Note: panelist columns use raw names BEFORE COLUMN_RENAME_MAP is applied
 EXPECTED_PANELIST_COLS = {
-    'Household_Cd', 'Panel_Year', 'Projection_Factor',
-    'Household_Income', 'Fips_State_Desc', 'DMA_Cd'
+    'Household_Cd', 'Panel_Year', 'Projection_Factor', 'Projection_Factor_Magnet',
+    'Household_Income', 'Household_Size', 'Type_Of_Residence',
+    'Household_Composition', 'Age_And_Presence_Of_Children',
+    'Male_Head_Age', 'Female_Head_Age',
+    'Male_Head_Employment', 'Female_Head_Employment',
+    'Male_Head_Education', 'Female_Head_Education',
+    'Male_Head_Occupation', 'Female_Head_Occupation',
+    'Male_Head_Birth', 'Female_Head_Birth',
+    'Marital_Status', 'Race', 'Hispanic_Origin',
+    'Panelist_ZipCd', 'Fips_State_Cd', 'Fips_State_Desc',
+    'Fips_County_Cd', 'Fips_County_Desc', 'Region_Cd',
+    'Scantrack_Market_Identifier_Cd', 'Scantrack_Market_Identifier_Desc',
+    'DMA_Cd', 'DMA_Name',
+    'Kitchen_Appliances', 'TV_Items', 'Household_Internet_Connection',
+    'Wic_Indicator_Current', 'Wic_Indicator_Ever_Not_Current',
+    'Member_1_Birth', 'Member_1_Relationship_Sex', 'Member_1_Employment',
+    'Member_2_Birth', 'Member_2_Relationship_Sex', 'Member_2_Employment',
+    'Member_3_Birth', 'Member_3_Relationship_Sex', 'Member_3_Employment',
+    'Member_4_Birth', 'Member_4_Relationship_Sex', 'Member_4_Employment',
+    'Member_5_Birth', 'Member_5_Relationship_Sex', 'Member_5_Employment',
+    'Member_6_Birth', 'Member_6_Relationship_Sex', 'Member_6_Employment',
+    'Member_7_Birth', 'Member_7_Relationship_Sex', 'Member_7_Employment',
 }
 
 EXPECTED_TRIP_COLS = {
-    'trip_code_uc', 'household_code', 'store_code_uc', 'purchase_date'
+    'trip_code_uc', 'household_code', 'purchase_date',
+    'retailer_code', 'store_code_uc', 'panel_year',
+    'store_zip3', 'total_spent', 'method_of_payment_cd'
 }
 
+# Note: panel_year is appended by the code, not present in raw purchase files
 EXPECTED_PURCHASE_COLS = {
-    'trip_code_uc', 'upc', 'upc_ver_uc', 'quantity'
+    'trip_code_uc', 'upc', 'upc_ver_uc', 'quantity',
+    'total_price_paid', 'coupon_value', 'deal_flag_uc'
 }
 
 
@@ -1423,14 +1448,20 @@ class PanelReader(object):
         _validate_columns(df_trips.column_names, EXPECTED_TRIP_COLS,
                           f"trips ({year})")
 
-        # Get unique UPCs from products (handles both Arrow Table and pandas)
-        if isinstance(self.df_products, pa.Table):
-            unique_upcs = pc.unique(self.df_products['upc']).to_pylist()
-        else:
-            unique_upcs = self.df_products['upc'].unique().tolist()
+        # Get unique UPCs from products to filter purchases (if products were read)
+        has_products = (isinstance(self.df_products, pa.Table) and self.df_products.num_rows > 0) or \
+                       (isinstance(self.df_products, pd.DataFrame) and not self.df_products.empty)
 
-        purchase_filter = (pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy())) &\
-                          (pads.field('upc').isin(unique_upcs))
+        trip_filter_purchases = pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy())
+
+        if has_products:
+            if isinstance(self.df_products, pa.Table):
+                unique_upcs = pc.unique(self.df_products['upc']).to_pylist()
+            else:
+                unique_upcs = self.df_products['upc'].unique().tolist()
+            purchase_filter = trip_filter_purchases & pads.field('upc').isin(unique_upcs)
+        else:
+            purchase_filter = trip_filter_purchases
 
         ds_purchases = pads.dataset(_read_csv(self, f_purchases,
                     parse_options = parse_opt,
