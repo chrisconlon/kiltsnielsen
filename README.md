@@ -63,6 +63,17 @@ Check with your institution to gain access to the data. Once you have gained acc
 
 If you unzip files, make sure they are preserved in the original Nielsen directory structure. (Do not rearrange the directory structure.) If you use .tgz files directly, place them in the directory you pass to `RetailReader` or `PanelReader`.
 
+###### Performance: Extracted vs .tgz
+
+Reading from `.tgz` archives works but is significantly slower for large archives because each file requires streaming through the compressed archive. For the Consumer Panel data (many small archives, ~500MB each), the difference is modest. For large Retail Scanner archives (single 5-10GB `.tgz`), extracted files can be **100x+ faster**:
+
+| Source | Scanner read_sales (CT liquor, 7 years) |
+|--------|----------------------------------------|
+| Extracted files | ~8 seconds |
+| .tgz archive (6.7GB) | ~48 minutes |
+
+**Recommendation:** Extract `.tgz` files for repeated use or large scanner datasets. Use `.tgz` directly for one-off reads or when disk space is limited.
+
 ## QuickStart
 
 This shows how we process the retail scanner data for [Backus Conlon Sinkinson (2021)][bcs] 
@@ -136,11 +147,11 @@ RetailReader defines the class object used to read in the Nielsen Retail Scanner
 
 
 ###### Objects:
-- `df_products` (_pandas DataFrame_): default empty, stores products data after processing
-- `df_sales` (_pandas DataFrame_): default empty, stores sales data after processing
-- `df_stores` (_pandas DataFrame_): default empty, stores store data after processing
-- `df_rms` (_pandas DataFrame_): default empty, stores RMS versions data after processing
-- `df_extra` (_pandas DataFrame_): default empty, stores extra product data after processing
+- `df_products` (_PyArrow Table_): default empty, stores products data after processing
+- `df_sales` (_PyArrow Table_): default empty, stores sales data after processing
+- `df_stores` (_PyArrow Table_): default empty, stores store data after processing
+- `df_rms` (_PyArrow Table_): default empty, stores RMS versions data after processing
+- `df_extra` (_PyArrow Table_): default empty, stores extra product data after processing
 - `all_years` (_list_): list of years for which data will be processed
 - `files_product` (_pathlib Path object_): stores name of product characteristic file
 - `files_rms` (_list of pathlib Path objects_): stores names of annual rms_versions files
@@ -264,13 +275,13 @@ PanelReader defines the class object used to read in the Nielsen Consumer Panel 
 
 
 ###### Objects:
-- `df_products` (_pandas DataFrame_): default empty, stores products data after from Master Files processing 
-- `df_variations` (_pandas DataFrame_): default empty, stores brand_variations data from Master Files after processing 
-- `df_retailers` (_pandas DataFrame_): default empty, stores retailers data from Master Files after processing
-- `df_trips` (_pandas DataFrame_): default empty, stores annual trips data after processing
-- `df_panelists` (_pandas DataFrame_): default empty, stores annual panelists data after processing
-- `df_purchases` (_pandas DataFrame_): default empty, stores annual purchases after processing
-- `df_extra` (_pandas DataFrame_): default empty, stores annual products extra characteristics data after processing
+- `df_products` (_PyArrow Table_): default empty, stores products data after from Master Files processing
+- `df_variations` (_PyArrow Table_): default empty, stores brand_variations data from Master Files after processing
+- `df_retailers` (_PyArrow Table_): default empty, stores retailers data from Master Files after processing
+- `df_trips` (_PyArrow Table_): default empty, stores annual trips data after processing
+- `df_panelists` (_PyArrow Table_): default empty, stores annual panelists data after processing
+- `df_purchases` (_PyArrow Table_): default empty, stores annual purchases after processing
+- `df_extra` (_PyArrow Table_): default empty, stores annual products extra characteristics data after processing
 - `files_annual` (_list of pathlib Path objects_)
 - `files_product` (_list of pathlib Path objects_): stores name of _unrevised_ products file
 - `files_variation` (_list of pathlib Path objects_): stores name of _unrevised_ brand variations file
