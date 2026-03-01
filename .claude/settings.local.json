@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/ctc5/Documents/GitHub/kiltsnielsen -name \"*.py\" -exec wc -l {} +)",
+      "Bash(du -sh /Users/ctc5/Documents/GitHub/kiltsnielsen/kiltsreader/*.py)",
+      "WebFetch(domain:arrow.apache.org)"
+    ]
+  }
+}
