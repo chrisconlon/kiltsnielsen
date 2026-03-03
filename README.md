@@ -10,7 +10,7 @@ Built on [PyArrow][apache] (`>= 17.0`). All data is returned as PyArrow Tables f
 ## Installation
 
 ```
-pip install git+https://github.com/chrisconlon/kiltsnielsen
+uv pip install git+https://github.com/chrisconlon/kiltsnielsen
 ```
 
 Requires Python >= 3.9. Installs `pyarrow`, `pandas`, and `numpy` automatically.
@@ -24,7 +24,7 @@ Get access through your institution at the [Kilts Center][kilts], then download:
 
 You can either extract the `.tgz` files or use them directly. If extracting, preserve the original directory structure.
 
-> **Performance tip:** For large scanner archives (5GB+), extracting is **~100x faster** than reading from `.tgz`. Panel archives (~500MB each) show little difference. Extract for repeated use; use `.tgz` directly for one-off reads.
+> **Performance tip:** For large scanner archives (5GB+), extracting is **~100x faster** than reading from `.tgz`. Panel archives (~500MB each) show little difference. Extract for repeated use; use `.tgz` directly for one-off reads only if storage is an issue.
 
 ## Quick Start
 

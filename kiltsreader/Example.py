@@ -3,7 +3,7 @@
 """
 Created on Fri Oct  1 11:37:46 2021
 
-@author: Chitra Marti
+@author: Chitra Marti, Chris Conlon
 
 Example for how to read in Nielsen Retail Scanner and Panel data
 
