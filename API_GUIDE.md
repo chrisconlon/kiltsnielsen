@@ -120,12 +120,12 @@ Same as RetailReader. Writes panelists, trips, purchases, products, retailers, a
 ### Errata
 
 **`read_revised_panelists()`**
-Applies Nielsen errata to `df_products`, `df_variations`, `df_retailers`, and `df_panelists`. Must call `read_annual()`, `read_products()`, `read_variations()`, and `read_retailers()` first.
+Applies Nielsen errata (files under `Revised_Panelist_Files/`) by key: panelists by (`household_code`, `panel_year`), products by (`upc`, `upc_ver_uc`), brand variations by (`brand_code_uc`, `brand_descr_alternative`), retailers by `retailer_code`. Non-missing revised values replace the originals; row order and column types are kept. Call `read_annual()` first, and `read_products()`, `read_variations()`, `read_retailers()` for the tables to be revised; tables not read, and years without a revision file, are left as they are.
 
 **`process_open_issues()`**
-Fixes two known issues:
-- Adds missing flavor codes to 2010 extra characteristics
-- Corrects male head of household birth month
+Handles the open issues for which Kilts ships supplement files (`OpenIssues_SupplementFiles/`):
+- Fills the missing 2010 flavor code and description in `df_extra` by UPC (call `read_extra()` first). UPCs written as floats in the supplement are rounded; UPCs listed with more than one flavor are left missing and reported.
+- Checks the household heads' birth years in `df_panelists` against the corrected birth dates. The panelist files now carry the birth year only and the corrections concern the month, so nothing is changed; a disagreement in the year is reported.
 
 
 ## Common Filter Parameters

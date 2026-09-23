@@ -199,6 +199,9 @@ EXPECTED_PANELIST_COLS = {
     'Member_7_Birth', 'Member_7_Relationship_Sex', 'Member_7_Employment',
 }
 
+# Not in the trips files before 2013
+OPTIONAL_TRIP_COLS = frozenset({'method_of_payment_cd'})
+
 EXPECTED_TRIP_COLS = {
     'trip_code_uc', 'household_code', 'purchase_date',
     'retailer_code', 'store_code_uc', 'panel_year',
@@ -212,13 +215,14 @@ EXPECTED_PURCHASE_COLS = {
 }
 
 
-def _validate_columns(actual_columns, expected_columns, file_description="file"):
+def _validate_columns(actual_columns, expected_columns, file_description="file", optional=frozenset()):
     """Warn about missing or unexpected columns in a data file.
-    Helps detect NielsenIQ format changes early.
+    Helps detect NielsenIQ format changes early. Columns in `optional` are expected but may be
+    absent (e.g. ones NielsenIQ added in later years).
     """
     actual = set(actual_columns)
     expected = set(expected_columns)
-    missing = expected - actual
+    missing = expected - set(optional) - actual
     unexpected = actual - expected
 
     if missing:
@@ -358,6 +362,43 @@ def _keep_shallowest(files, key, dir_read, description):
                 UserWarning, stacklevel=3)
         kept.append(copies[0])
     return sorted(kept)
+
+
+def _update_by_key(table, revision, keys, description):
+    """Replace values in `table` with the non-null values of `revision` for the same keys.
+
+    Key-based counterpart of pandas' DataFrame.update: rows are matched on `keys` (not on row
+    position), only columns present in both tables change, rows of `revision` with no match in
+    `table` are ignored, and the row order and column types of `table` are kept. Revision values
+    are cast to the table's types with Arrow's checked cast, so an out-of-range value raises.
+    """
+    if revision.group_by(keys).aggregate([([], 'count_all')]).num_rows != revision.num_rows:
+        raise ValueError(f"{description}: the revision has more than one row per {keys}")
+    columns = [c for c in revision.column_names if c in table.column_names and c not in keys]
+    rev = revision.select(keys + columns).rename_columns(keys + [f'__rev_{c}' for c in columns])
+    rev = rev.cast(pa.schema([table.schema.field(k) for k in keys]
+                             + [pa.field(f'__rev_{c}', _value_type(table.schema.field(c).type)) for c in columns]))
+    left = table.select(keys).append_column('__row', pa.array(range(table.num_rows), pa.int64()))
+    matched = left.join(rev, keys=keys, join_type='left outer', use_threads=False).sort_by('__row')
+    for c in columns:
+        original = table[c]
+        value_type = _value_type(original.type)
+        new = pc.if_else(pc.is_valid(matched[f'__rev_{c}']), matched[f'__rev_{c}'], original.cast(value_type))
+        if pa.types.is_dictionary(original.type):
+            new = new.dictionary_encode().cast(original.type)
+        table = table.set_column(table.schema.get_field_index(c), c, new)
+    return table
+
+
+def _quarter_end(dates):
+    """Last day of each date's quarter (pandas' QuarterEnd(0): a quarter-end date maps to itself)."""
+    one_day = pa.scalar(86_400, pa.duration('s')).cast(pa.duration(dates.type.unit))
+    start = pc.floor_temporal(dates, unit='quarter')
+    return pc.subtract(pc.ceil_temporal(pc.add(start, one_day), unit='quarter'), one_day)
+
+
+def _value_type(t):
+    return t.value_type if pa.types.is_dictionary(t) else t
 
 
 def _has_data_files(files):
@@ -1027,14 +1068,16 @@ class RetailReader(object):
         def aux_clean(df_tab, add_dates=False):
             # original format is 20050731
             # NOTE different from the more formal year function (CC: not as far as I can tell)
-            df_tab = df_tab.set_column(2,'week_end', 
-                pa.array(pd.to_datetime( df_tab['week_end'].to_numpy(), format = '%Y%m%d'),
-                pa.timestamp('ns')))
+            def replace(tab, name, values):
+                return tab.set_column(tab.schema.get_field_index(name), name, values)
 
-            if 'feature' in df_tab.schema.to_string():
+            df_tab = replace(df_tab, 'week_end', pc.strptime(pc.cast(df_tab['week_end'], pa.string()),
+                                                             format='%Y%m%d', unit='ns'))
+
+            if 'feature' in df_tab.column_names:
                 fill_value = pa.scalar(-1, type=pa.int8())
-                df_tab = df_tab.set_column(6,'feature',pa.compute.fill_null(df_tab['feature'],fill_value))
-                df_tab = df_tab.set_column(7,'display',pa.compute.fill_null(df_tab['display'],fill_value))
+                df_tab = replace(df_tab, 'feature', pc.fill_null(df_tab['feature'], fill_value))
+                df_tab = replace(df_tab, 'display', pc.fill_null(df_tab['display'], fill_value))
 
             # Compute unit price and year and add upc_ver_uc
             df_tab = df_tab.append_column('unit_price', pc.divide(df_tab['price'],df_tab['prmult']))
@@ -1046,10 +1089,8 @@ class RetailReader(object):
                 keys=["store_code_uc","panel_year"],join_type='left outer')
             
             if add_dates:
-                my_dates=pd.DataFrame({'week_end':pa.compute.unique(df_tab['week_end']).to_pandas().sort_values(ignore_index=True)})
-                my_dates['quarter']=my_dates.week_end + pd.offsets.QuarterEnd(0)
-                my_dates['month']=my_dates['week_end'].astype('datetime64[M]')
-                df_tab=df_tab.join(pa.Table.from_pandas(my_dates,preserve_index=False), keys=["week_end"])
+                df_tab = df_tab.append_column('quarter', _quarter_end(df_tab['week_end']))
+                df_tab = df_tab.append_column('month', pc.floor_temporal(df_tab['week_end'], unit='month'))
 
             return df_tab
 
@@ -1526,7 +1567,7 @@ class PanelReader(object):
                     convert_options = conv_opt)
                     ).to_table(filter = trip_filter)
         _validate_columns(df_trips.column_names, EXPECTED_TRIP_COLS,
-                          f"trips ({year})")
+                          f"trips ({year})", optional=OPTIONAL_TRIP_COLS)
 
         # Get unique UPCs from products to filter purchases (if products were read)
         has_products = (isinstance(self.df_products, pa.Table) and self.df_products.num_rows > 0) or \
@@ -1720,8 +1761,14 @@ class PanelReader(object):
         Function: corrects the panelist files using errata from the Panel files
         Every year, Nielsen has some panelists whose data they revise
 
-        Must have already run the read_annual() function so that df_panelists
-        is not an empty dataframe
+        Revisions replace values for the same keys: panelists by (household_code, panel_year),
+        products by (upc, upc_ver_uc), brand variations by (brand_code_uc,
+        brand_descr_alternative), retailers by retailer_code. A table that has not been read
+        (e.g. read_retailers() not called) or has no revision file is left as it is. Years
+        without a revised panelist file are skipped.
+
+        Must have already run read_annual() (and read_products(), read_variations(),
+        read_retailers() for the tables to be revised).
         """
 
         self.files_revised = [f for f in self.files if
@@ -1733,58 +1780,27 @@ class PanelReader(object):
                                        int(f.parent.parent.name)
                                        in self.all_years]
 
-        dict_files_panelist_revised = {get_year(f):
-                                       f for f in self.files_panelist_revised
-                                       }
+        tsv = csv.ParseOptions(delimiter='\t')
+        for f in sorted(self.files_panelist_revised):
+            revision = _read_csv(self, f, parse_options=tsv,
+                                 convert_options=csv.ConvertOptions(column_types=dict_types))
+            revision = revision.rename_columns([COLUMN_RENAME_MAP.get(c, c) for c in revision.column_names])
+            self.df_panelists = _update_by_key(self.df_panelists, revision,
+                                               ['household_code', 'panel_year'], f"Revised panelists {f.name}")
 
-        # Convert Arrow tables to pandas for .update() compatibility
-        # then convert back at the end
-        if isinstance(self.df_panelists, pa.Table):
-            self.df_panelists = self.df_panelists.to_pandas()
-        if isinstance(self.df_products, pa.Table):
-            self.df_products = self.df_products.to_pandas()
-        if isinstance(self.df_variations, pa.Table):
-            self.df_variations = self.df_variations.to_pandas()
-        if isinstance(self.df_retailers, pa.Table):
-            self.df_retailers = self.df_retailers.to_pandas()
-
-        for year in self.all_years:
-            df_panelist_rev = pd.read_csv(dict_files_panelist_revised[year],
-                                          delimiter = '\t')
-            self.df_panelists.update(df_panelist_rev)
-
-        # update the other files (if they are empty, they will stay empty)
-        self.file_product_revised = [f for f in self.files_revised if
-                                     'products' in f.name]
-        df_products_rev = pd.read_csv(self.file_product_revised[0],
-                                      delimiter = '\t')
-        self.df_products.update(df_products_rev)
-
-        # variations
-        self.file_variations_revised = [f for f in self.files_revised if
-                                        'brand_variations' in f.name]
-        df_variations_rev = pd.read_csv(self.file_variations_revised[0],
-                                        delimiter = '\t',
-                                        engine = 'python',
-                                        encoding = 'utf',
-                                        quoting=3)
-        self.df_variations.update(df_variations_rev)
-
-        # retailers
-        self.file_retailers_revised = [f for f in self.files_revised if
-                                     'retailers' in f.name]
-        df_retailers_rev = pd.read_csv(self.file_retailers_revised[0],
-                                       delimiter = '\t',
-                                       engine = 'python',
-                                       encoding = 'utf',
-                                       quoting=3)
-        self.df_retailers.update(df_retailers_rev)
-
-        # Convert back to Arrow tables
-        self.df_panelists = pa.Table.from_pandas(self.df_panelists, preserve_index=False)
-        self.df_products = pa.Table.from_pandas(self.df_products, preserve_index=False)
-        self.df_variations = pa.Table.from_pandas(self.df_variations, preserve_index=False)
-        self.df_retailers = pa.Table.from_pandas(self.df_retailers, preserve_index=False)
+        # the master files (unquoted, UTF-8)
+        unquoted = csv.ParseOptions(delimiter='\t', quote_char=False)
+        for attr, name, keys in [('df_products', 'products', ['upc', 'upc_ver_uc']),
+                                 ('df_variations', 'brand_variations', ['brand_code_uc', 'brand_descr_alternative']),
+                                 ('df_retailers', 'retailers', ['retailer_code'])]:
+            files = [f for f in self.files_revised if f.stem == name]
+            table = getattr(self, attr)
+            if not files or not isinstance(table, pa.Table) or table.num_rows == 0:
+                continue
+            revision = _read_csv(self, files[0], read_options=csv.ReadOptions(encoding='utf8'),
+                                 parse_options=unquoted,
+                                 convert_options=csv.ConvertOptions(column_types=dict_types))
+            setattr(self, attr, _update_by_key(table, revision, keys, f"Revised {name}"))
 
         return
 
@@ -1794,13 +1810,22 @@ class PanelReader(object):
 
     def process_open_issues(self):
         """
-        Function: addresses two of the current (as of 10/01/2021) open issues
-        in Nielsen Panel data
-        Issue 1: Flavor Code in 2010 missing
-        Issue 2: Male Head Birth Month incorrect
-        See documentation within Panel files for a description of the issues
+        Function: addresses the open issues in the Nielsen Panel data for which
+        Kilts distributes supplement files (OpenIssues_SupplementFiles)
 
-        Affected files: df_extra, df_panelists
+        Issue 1: flavor code and description are missing from the 2010 extra
+        attributes. Filled from Latest_Flavor_2010.csv by (upc, panel_year = 2010).
+        That file writes some UPCs as floats just below the integer
+        (85315210097.9999 for 85315210098), so UPCs are rounded. UPCs listed with
+        more than one flavor are left missing (there is no basis for choosing).
+
+        Issue 2: household heads' birth months were wrong in 2004-2007 and 2010.
+        The panelist files now carry the birth year only (YYYY), and the
+        corrections change months only, so there is nothing to apply. The years
+        in the supplement are compared with df_panelists and any disagreement is
+        reported; the data are not changed.
+
+        Affected files: df_extra (issue 1); df_panelists is only checked (issue 2)
         """
 
         self.files_issues = [f for f in self.files if
@@ -1810,50 +1835,49 @@ class PanelReader(object):
 
         print('Current Open Issues:', self.open_issues)
 
-        # Convert Arrow tables to pandas for update/merge compatibility
-        if isinstance(self.df_extra, pa.Table):
-            self.df_extra = self.df_extra.to_pandas()
-        if isinstance(self.df_panelists, pa.Table):
-            self.df_panelists = self.df_panelists.to_pandas()
+        # Issue 1: 2010 flavor codes
+        flavor_files = [f for f in self.files_issues if f.name == 'Latest_Flavor_2010.csv']
+        if flavor_files and isinstance(self.df_extra, pa.Table) and self.df_extra.num_rows:
+            flavor = _read_csv(self, flavor_files[0])
+            upc = pc.cast(pc.round(pc.cast(flavor['upc'], pa.float64())), pa.uint64())
+            flavor = pa.table({'upc': upc, 'panel_year': pa.array([2010] * flavor.num_rows, pa.uint16()),
+                               'flavor_code': flavor['flavor_code'], 'flavor_descr': flavor['flavor_descr']})
+            counts = flavor.group_by('upc').aggregate([([], 'count_all')])
+            single = counts.filter(pc.equal(counts['count_all'], 1))['upc']
+            ambiguous = counts.num_rows - len(single)
+            if ambiguous:
+                warnings.warn(f"Latest_Flavor_2010.csv: {ambiguous} UPCs have more than one flavor and are left missing",
+                              UserWarning, stacklevel=2)
+            flavor = flavor.filter(pc.is_in(flavor['upc'], value_set=single))
+            self.df_extra = _update_by_key(self.df_extra, flavor, ['upc', 'panel_year'], "2010 flavor codes")
 
-        # First, Address the ExtraAttributesFlavorCode
-        if 'ExtraAttributes_FlavorCode' in self.open_issues:
-            self.flavor_csv = [f for f in self.files_issues if
-                               f.name == 'Latest_Flavor_2010.csv']
+        # Issue 2: birth years (check only)
+        birth_files = [f for f in self.files_issues if f.parent.name == 'Panelist_maleHeadBirth_femaleHeadBirth'
+                       and f.suffix == '.tsv']
+        if birth_files and isinstance(self.df_panelists, pa.Table) and self.df_panelists.num_rows:
+            for f in sorted(birth_files):
+                year = 2000 + int(f.name.split('_')[1])  # panel_10_birth_dates_corrected.tsv
+                if year not in self.all_years:
+                    continue
+                births = _read_csv(self, f, parse_options=csv.ParseOptions(delimiter='\t'),
+                                   convert_options=csv.ConvertOptions(column_types={
+                                       'household_id': pa.uint32(), 'male_head_birth': pa.string(),
+                                       'female_head_birth': pa.string()}))
+                panel = self.df_panelists.filter(pc.equal(self.df_panelists['panel_year'], year))
+                joined = births.join(panel.select(['household_code', 'Male_Head_Birth', 'Female_Head_Birth']),
+                                     keys='household_id', right_keys='household_code', join_type='inner',
+                                     use_threads=False)
+                for supplement, column in [('male_head_birth', 'Male_Head_Birth'),
+                                           ('female_head_birth', 'Female_Head_Birth')]:
+                    corrected = pc.cast(pc.utf8_slice_codeunits(pc.if_else(pc.equal(joined[supplement], '-'), None,
+                                                                           joined[supplement]), 0, 4), pa.string())
+                    current = pc.cast(joined[column], pa.string())
+                    current = pc.if_else(pc.equal(current, ''), None, current)
+                    same = pc.or_kleene(pc.equal(corrected, current), pc.and_(pc.is_null(corrected), pc.is_null(current)))
+                    differ = joined.num_rows - pc.sum(pc.fill_null(same, False).cast(pa.int64())).as_py()
+                    if differ:
+                        warnings.warn(f"{f.name}: {column} year differs from the panelist file for {differ} households",
+                                      UserWarning, stacklevel=2)
 
-            df_flavor = pd.read_csv(self.flavor_csv[0], delimiter = '\t')
-            self.df_extra.update(df_flavor)
-
-        # Then, Address the Panelist Birth Years
-        if 'Panelist_maleHeadBirth_femaleHeadBirth' in self.open_issues:
-            files_birth = [f for f in self.files_issues
-                           if f.parent.name ==
-                           'Panelist_maleHeadBirth_femaleHeadBirth']
-            dict_files_birth = {2000+int(f.name[6:8]): f for f in files_birth}
-            dict_files_birth = {k: dict_files_birth[k]
-                                for k in dict_files_birth.keys()
-                                if k in self.all_years }
-
-            for f in dict_files_birth:
-                f_ann = pd.read_csv(dict_files_birth[f],
-                                    delimiter = '\t')
-                f_ann.columns = ['household_code',
-                                 'panel_year',
-                                 'Male_Head_Birth',
-                                 'Female_Head_Birth'
-                                 ]
-                f_ann['Female_Head_Birth'] = f_ann['Female_Head_Birth'].replace('-', np.nan)
-                f_ann['Male_Head_Birth'] = f_ann['Male_Head_Birth'].replace('-', np.nan)
-
-                f_ann['Male_Head_Birth'] = (f_ann['Male_Head_Birth'].str[:4].fillna(-1)).astype(int)
-                f_ann['Female_Head_Birth'] = (f_ann['Female_Head_Birth'].str[:4].fillna(-1)).astype(int)
-
-                self.df_panelists = self.df_panelists.merge(
-                    f_ann, on = ['panel_year', 'household_code'],
-                    suffixes = ('', '_revised'),
-                    how = 'left')
-
-        # Convert back to Arrow tables
-        self.df_extra = pa.Table.from_pandas(self.df_extra, preserve_index=False)
-        self.df_panelists = pa.Table.from_pandas(self.df_panelists, preserve_index=False)
+        return
 
