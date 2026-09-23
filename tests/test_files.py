@@ -64,3 +64,39 @@ def test_read_sales_without_read_products(tmp_path):
     make_retail(tmp_path)
     rr = read(tmp_path, products=False)
     assert rr.df_sales.num_rows == 8
+
+
+def make_archive(tmp_path: Path) -> Path:
+    """The synthetic distribution packed as a Kilts-style .tgz, alone in its folder."""
+    import tarfile
+    staging, folder = tmp_path / "staging", tmp_path / "archives"
+    make_retail(staging / "nielsen_extracts" / "RMS")
+    folder.mkdir()
+    with tarfile.open(folder / "cereal_2019.tgz", "w:gz") as tar:
+        tar.add(staging / "nielsen_extracts", arcname="nielsen_extracts")
+    return folder
+
+
+def test_archive_read_with_and_without_extraction_matches_the_folder(tmp_path):
+    folder = make_archive(tmp_path)
+    plain = read(tmp_path / "staging").df_sales
+    assert read(folder).df_sales.equals(plain)  # streamed from the archive
+    extracted = tmp_path / "extracted"
+    rr = RetailReader(folder, verbose=False, extract_dir=extracted)
+    rr.read_stores(); rr.filter_stores(keep_channels=["F"]); rr.read_products(keep_modules=[1344]); rr.read_sales()
+    assert rr.df_sales.equals(plain)
+    assert (extracted / "cereal_2019" / "nielsen_extracts" / "RMS" / "2019" / "Movement_Files" / "1005_2019" / "1344_2019.tsv").exists()
+
+
+def test_extraction_is_reused_and_redone_when_the_archive_changes(tmp_path):
+    import os
+    folder, extracted = make_archive(tmp_path), tmp_path / "extracted"
+    sales = extracted / "cereal_2019" / "nielsen_extracts" / "RMS" / "2019" / "Movement_Files" / "1005_2019" / "1344_2019.tsv"
+    RetailReader(folder, verbose=False, extract_dir=extracted)
+    os.utime(sales, ns=(1, 1))  # mark the extracted copy
+    RetailReader(folder, verbose=False, extract_dir=extracted)
+    assert sales.stat().st_mtime_ns == 1  # reused, not extracted again
+    archive = folder / "cereal_2019.tgz"
+    os.utime(archive, ns=(archive.stat().st_atime_ns, archive.stat().st_mtime_ns + 10**9))
+    RetailReader(folder, verbose=False, extract_dir=extracted)
+    assert sales.stat().st_mtime_ns != 1  # the archive changed: extracted again

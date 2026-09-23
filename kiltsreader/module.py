@@ -256,10 +256,20 @@ class TgzFileManager:
     When Nielsen data is provided as .tgz files (as downloaded from Kilts),
     this class enumerates archive contents and provides file-like objects
     for reading without extracting to disk.
+
+    With extract_dir, each archive is instead extracted once, in one sequential
+    pass, to extract_dir/<archive name>/ (data files only), and files are read
+    from there. A marker written after the extraction records the archive's size
+    and modification time; a later reader reuses the folder when they match and
+    extracts again otherwise (e.g. after an interrupted extraction). Reading from
+    an archive without extracting decompresses it from the start for every file.
     """
 
-    def __init__(self, dir_read):
+    MARKER = '.kiltsreader_extracted'
+
+    def __init__(self, dir_read, extract_dir=None):
         self.dir_read = dir_read
+        self.extract_dir = None if extract_dir is None else path.Path(extract_dir)
         # Search for .tgz files in dir_read and one level deep
         self.tgz_files = sorted(set(
             list(dir_read.glob('*.tgz')) + list(dir_read.glob('*/*.tgz'))
@@ -289,29 +299,55 @@ class TgzFileManager:
             # Skip reference/documentation archives
             if 'reference' in tgz_name or 'documentation' in tgz_name:
                 continue
-            with tarfile.open(tgz_path, 'r:gz') as tar:
-                for member in tar.getmembers():
-                    if not member.isfile():
-                        continue
-                    name_lower = member.name.lower()
-                    if not (name_lower.endswith('.tsv') or name_lower.endswith('.csv')):
-                        continue
-                    # Skip macOS resource fork files
-                    base = path.Path(member.name).stem
-                    if base.startswith('._') or '/._' in member.name:
-                        continue
-                    virtual_path = self.dir_read / member.name
-                    self._archive_map[virtual_path] = (tgz_path, member.name)
-                    virtual_files.append(virtual_path)
+            if self.extract_dir is not None:
+                names = self._extract(tgz_path)
+            else:
+                with tarfile.open(tgz_path, 'r:gz') as tar:
+                    names = [m.name for m in tar.getmembers() if self._is_data_file(m)]
+            for name in names:
+                virtual_path = self.dir_read / name
+                self._archive_map[virtual_path] = (tgz_path, name)
+                virtual_files.append(virtual_path)
         return virtual_files
 
+    @staticmethod
+    def _is_data_file(member):
+        """TSV/CSV files, skipping macOS resource forks."""
+        name_lower = member.name.lower()
+        base = path.Path(member.name).stem
+        return (member.isfile() and (name_lower.endswith('.tsv') or name_lower.endswith('.csv'))
+                and not base.startswith('._') and '/._' not in member.name)
+
+    def _extract(self, tgz_path):
+        """Extract the data files of one archive (once); return their names inside the archive."""
+        target = self.extract_dir / tgz_path.name.removesuffix('.tgz')
+        marker = target / self.MARKER
+        stamp = f"{tgz_path.stat().st_size} {tgz_path.stat().st_mtime_ns}"
+        if marker.exists():
+            lines = marker.read_text().splitlines()
+            if lines and lines[0] == stamp:
+                return lines[1:]
+            marker.unlink()
+        target.mkdir(parents=True, exist_ok=True)
+        names = []
+        with tarfile.open(tgz_path, 'r|gz') as tar:  # one sequential pass
+            for member in tar:
+                if self._is_data_file(member):
+                    tar.extract(member, path=target, filter='data')
+                    names.append(member.name)
+        marker.write_text("\n".join([stamp] + names) + "\n")
+        return names
+
     def open_file(self, virtual_path):
-        """Return a binary file-like object for a file inside an archive.
-        Returns None if the path is not an archive member.
+        """Return a binary file-like object for a file inside an archive, or with
+        extract_dir the path of its extracted copy. Returns None if the path is
+        not an archive member.
         """
         if virtual_path not in self._archive_map:
             return None
         tgz_path, member_name = self._archive_map[virtual_path]
+        if self.extract_dir is not None:
+            return self.extract_dir / tgz_path.name.removesuffix('.tgz') / member_name
         tar = tarfile.open(tgz_path, 'r:gz')
         member = tar.getmember(member_name)
         extracted = tar.extractfile(member)
@@ -331,6 +367,8 @@ def _read_csv(self, filepath, **kwargs):
     """
     if hasattr(self, '_tgz_manager') and self._tgz_manager is not None:
         file_obj = self._tgz_manager.open_file(filepath)
+        if isinstance(file_obj, path.Path):  # extracted copy
+            return csv.read_csv(file_obj, **kwargs)
         if file_obj is not None:
             try:
                 return csv.read_csv(pa.PythonFile(file_obj), **kwargs)
@@ -426,7 +464,7 @@ def get_files(self):
 
     if len(files) == 0 or not _has_data_files(files):
         # Try .tgz archives
-        self._tgz_manager = TgzFileManager(self.dir_read)
+        self._tgz_manager = TgzFileManager(self.dir_read, getattr(self, 'extract_dir', None))
         if self._tgz_manager.has_archives:
             archive_files = self._tgz_manager.get_archive_files(data_type=data_type)
             if archive_files:
@@ -639,7 +677,7 @@ class RetailReader(object):
     # initialize object
     # input: directory from which to read in the Scanner Data
     # if no input, assume current working directory
-    def __init__(self, dir_read = path.Path.cwd(), verbose = True):
+    def __init__(self, dir_read = path.Path.cwd(), verbose = True, extract_dir = None):
         """
         Function: initialize a RetailReader object
         identifies file names and locations for each dataset
@@ -648,6 +686,8 @@ class RetailReader(object):
         self.verbose = verbose
 
         self.dir_read = dir_read # save the folder to the class
+        # .tgz archives are extracted once to this folder and read from there (optional)
+        self.extract_dir = extract_dir
 
         # get all files in the relevant folder
         self.files = get_files(self)
@@ -1231,7 +1271,7 @@ class PanelReader(object):
     Many filtering options available
 
     """
-    def __init__(self, dir_read = path.Path.cwd(), verbose = True):
+    def __init__(self, dir_read = path.Path.cwd(), verbose = True, extract_dir = None):
         """
         Function: initialize a PanelReader object
         identifies file names and locations for each dataset
@@ -1240,6 +1280,8 @@ class PanelReader(object):
         self.verbose = verbose
 
         self.dir_read = dir_read
+        # .tgz archives are extracted once to this folder and read from there (optional)
+        self.extract_dir = extract_dir
         self.files = get_files(self)
 
         # locate the common master files

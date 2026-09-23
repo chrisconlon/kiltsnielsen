@@ -26,7 +26,7 @@ You can either extract the `.tgz` files or use them directly. If extracting, pre
 
 If the same file appears more than once under the folder you pass (for example a second copy of the distribution in a subfolder), the reader uses the copy with the shortest path below that folder and warns about the others; two equally deep copies are an error. Point the reader at one copy to silence the warning.
 
-> **Performance tip:** For large scanner archives (5GB+), extracting is **~100x faster** than reading from `.tgz`. Panel archives (~500MB each) show little difference. Extract for repeated use; use `.tgz` directly for one-off reads only if storage is an issue.
+> **Performance tip:** Reading directly from a `.tgz` decompresses the archive from the start for every file. Pass `extract_dir=` to either reader to extract each archive once, in one pass, and read from there; later readers reuse the extraction (it is redone if the archive changes). On a 1 GB cereal archive, one year of sales took 79 s streamed from the `.tgz`, 37 s with `extract_dir` on first use, and 14 s once extracted. Use `.tgz` directly without `extract_dir` only for one-off reads when storage is short.
 
 ## Quick Start
 

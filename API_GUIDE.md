@@ -5,8 +5,10 @@ Detailed method reference for **RetailReader** and **PanelReader**. For installa
 ## RetailReader
 
 ```python
-RetailReader(dir_read=Path.cwd(), verbose=True)
+RetailReader(dir_read=Path.cwd(), verbose=True, extract_dir=None)
 ```
+
+`extract_dir` (both readers): when the data are `.tgz` archives, extract each one once to this folder and read from there; later readers reuse it, and it is redone if the archive changes.
 
 **Typical workflow:** init &rarr; `filter_years` &rarr; `read_stores` &rarr; `filter_stores` &rarr; `read_products` &rarr; `filter_sales` &rarr; `read_sales` &rarr; `write_data`
 
@@ -65,7 +67,7 @@ Writes all non-empty datasets as `.parquet` files named `{stub}_{type}.parquet`.
 ## PanelReader
 
 ```python
-PanelReader(dir_read=Path.cwd(), verbose=True)
+PanelReader(dir_read=Path.cwd(), verbose=True, extract_dir=None)
 ```
 
 **Typical workflow:** init &rarr; `filter_years` &rarr; `read_retailers` &rarr; `read_products` &rarr; `read_annual` &rarr; `write_data`
