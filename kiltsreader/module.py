@@ -123,6 +123,19 @@ dict_types = {'upc': pa.uint64(),
               'quantity':pa.uint16(),
               'household_code':pa.uint32(),
               'Household_Cd':pa.uint32(),
+              # Panelist columns that match store and sales keys, typed alike so the tables join
+              # without casts (Panel_Year becomes panel_year after reading). Ranges in the Kilts
+              # files 2004-2020: Panel_Year 2004-2020, DMA_Cd 500-881, Fips_State_Cd <= 56,
+              # Fips_County_Cd <= 840. The CSV reader raises on a value outside the type.
+              'Panel_Year': pa.uint16(),
+              'DMA_Cd': pa.uint16(),
+              'Fips_State_Cd': pa.uint8(),
+              'Fips_County_Cd': pa.uint16(),
+              # Product hierarchy codes (nullable; otherwise inferred): group <= 9599, department <= 99
+              'product_group_code': pa.uint16(),
+              'department_code': pa.uint16(),
+              # Trip ids (<= 1.1e9) in trips and purchases; int64 is what inference already gave
+              'trip_code_uc': pa.int64(),
               'Fips_County_Desc':pa.string(),
               'Fips_State_Desc':pa.string(),
               'Scantrack_Market_Identifier_Desc':pa.string(),
@@ -1515,7 +1528,7 @@ class PanelReader(object):
         _validate_columns(ds_purchases.column_names, EXPECTED_PURCHASE_COLS,
                           f"purchases ({year})")
 
-        df_purchases = ds_purchases.append_column('panel_year', pa.array([year]*ds_purchases.num_rows,pa.int16()))
+        df_purchases = ds_purchases.append_column('panel_year', pa.array([year]*ds_purchases.num_rows,pa.uint16()))
 
         # Going through numpy and pandas map cannot be fastest solution here
         if add_household:
