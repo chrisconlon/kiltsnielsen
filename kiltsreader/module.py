@@ -1028,6 +1028,11 @@ class RetailReader(object):
             else:
                 pa_tab = aux_clean(pa_my.to_table(filter=pads.field('store_code_uc').isin(list_stores)), add_dates)
 
+            # The joins in aux_clean are multithreaded and return rows in a different order on
+            # every run. Sort on all the raw columns (store-upc-week is not unique in the
+            # Movement files) so that output and any float sums are reproducible.
+            pa_tab = pa_tab.sort_by([(c, 'ascending') for c in my_cols])
+
             if agg_function:
                 return agg_function(pa_tab, **kwargs)
             else:
@@ -1040,7 +1045,7 @@ class RetailReader(object):
             list_stores = self.df_stores['store_code_uc'].filter(pc.equal(self.df_stores['panel_year'],year)).to_pylist()
 
             pa_y = pa.concat_tables([aux_read_mod_year(f, list_stores, add_dates, agg_function, **kwargs)
-                                     for f in self.dict_sales[year]
+                                     for f in sorted(self.dict_sales[year])
                                      ])
 
             # still a table object, not a pandas dataframe
@@ -1053,7 +1058,7 @@ class RetailReader(object):
         
         
         # This does the work -- keep as PyArrow table
-        self.df_sales = pa.concat_tables([aux_read_year(y, add_dates, agg_function, **kwargs) for y in self.dict_sales.keys()])
+        self.df_sales = pa.concat_tables([aux_read_year(y, add_dates, agg_function, **kwargs) for y in sorted(self.dict_sales.keys())])
         
         # Merge the RMS (upc_ver_uc) and store (dma, retailer_code)
 
@@ -1515,6 +1520,8 @@ class PanelReader(object):
         # Going through numpy and pandas map cannot be fastest solution here
         if add_household:
             df_purchases=df_purchases.join(df_trips.select(['trip_code_uc','household_code']), keys=['trip_code_uc'])
+            # the join returns rows in a run-dependent order; restore a fixed one
+            df_purchases = df_purchases.sort_by([(c, 'ascending') for c in df_purchases.column_names])
 
         # add to the list
         self.df_trips.append(df_trips)
@@ -1547,7 +1554,7 @@ class PanelReader(object):
 
         # read in all the years
 
-        for year in self.all_years:
+        for year in sorted(self.all_years):
             print('Processing Year', year)
             tick()
             self.read_year(year, keep_states = keep_states,
