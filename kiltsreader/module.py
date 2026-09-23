@@ -30,7 +30,6 @@ See Example.py for implementation of the RetailReader and PanelReader functions
 import time
 import tarfile
 import warnings
-import pandas as pd
 import numpy as np
 import pyarrow as pa
 import pyarrow.dataset as pads
@@ -644,16 +643,9 @@ def get_extra(self, years = None, upc_list = None):
     return
 
 def aux_write_direct(df, filename, compr = 'brotli'):
-    if isinstance(df, pa.Table):
-        if df.num_rows == 0:
-            return
+    """Write a non-empty Arrow table to parquet (tables not read are empty and skipped)."""
+    if isinstance(df, pa.Table) and df.num_rows:
         pq.write_table(df, filename, compression = compr)
-        print('Wrote as direct parquet to', filename)
-    elif isinstance(df, pd.DataFrame):
-        if df.empty:
-            return
-        pq.write_table(pa.Table.from_pandas(df, preserve_index=False),
-                        filename, compression = compr)
         print('Wrote as direct parquet to', filename)
     return
 
@@ -766,11 +758,11 @@ class RetailReader(object):
 
         # Create empty DataFrames to store data as we process it
 
-        self.df_products = pd.DataFrame()
-        self.df_sales = pd.DataFrame()
-        self.df_stores = pd.DataFrame()
-        self.df_rms = {}
-        self.df_extra = pd.DataFrame()
+        self.df_products = pa.table({})
+        self.df_sales = pa.table({})
+        self.df_stores = pa.table({})
+        self.df_rms = pa.table({})
+        self.df_extra = pa.table({})
 
         return
 
@@ -1200,12 +1192,9 @@ class RetailReader(object):
         # Filter products for only those in sales data
         if 'upc' in self.df_sales.column_names:
             sales_upcs = pc.unique(self.df_sales['upc'])
-            if isinstance(self.df_products, pa.Table):
+            if self.df_products.num_rows:  # skipped when read_products() was not called
                 self.df_products = self.df_products.filter(
                     pc.is_in(self.df_products['upc'], value_set=sales_upcs))
-            elif len(self.df_products):  # skipped when read_products() was not called
-                self.df_products = self.df_products[
-                    self.df_products.upc.isin(sales_upcs.to_numpy())]
 
         return
 
@@ -1340,15 +1329,15 @@ class PanelReader(object):
                                for y in self.all_years}
 
 
-        self.df_products = pd.DataFrame()
-        self.df_variations = pd.DataFrame()
-        self.df_retailers = pd.DataFrame()
+        self.df_products = pa.table({})
+        self.df_variations = pa.table({})
+        self.df_retailers = pa.table({})
 
         self.df_panelists = []
         self.df_trips = []
         self.df_purchases = []
 
-        self.df_extra = pd.DataFrame()
+        self.df_extra = pa.table({})
 
         # NOTE some of these are repeats from RR
         # we will therefore append _panel to file names
@@ -1612,16 +1601,12 @@ class PanelReader(object):
                           f"trips ({year})", optional=OPTIONAL_TRIP_COLS)
 
         # Get unique UPCs from products to filter purchases (if products were read)
-        has_products = (isinstance(self.df_products, pa.Table) and self.df_products.num_rows > 0) or \
-                       (isinstance(self.df_products, pd.DataFrame) and not self.df_products.empty)
+        has_products = self.df_products.num_rows > 0
 
         trip_filter_purchases = pads.field('trip_code_uc').isin(df_trips['trip_code_uc'].to_numpy())
 
         if has_products:
-            if isinstance(self.df_products, pa.Table):
-                unique_upcs = pc.unique(self.df_products['upc']).to_pylist()
-            else:
-                unique_upcs = self.df_products['upc'].unique().tolist()
+            unique_upcs = pc.unique(self.df_products['upc']).to_pylist()
             purchase_filter = trip_filter_purchases & pads.field('upc').isin(unique_upcs)
         else:
             purchase_filter = trip_filter_purchases
@@ -1646,7 +1631,6 @@ class PanelReader(object):
         self.df_purchases.append(df_purchases)
         self.df_panelists.append(df_panelists)
 
-        # pd.concat([self.df_panelists, df_panelists.copy()], ignore_index = True)
 
         return
         # need to have already read in products?
@@ -1698,7 +1682,7 @@ class PanelReader(object):
                    compr = 'brotli', as_table = False,
                    separator = 'panel_year'):
         """
-        Function: writes pandas dataframes to parquets
+        Function: writes the tables that have been read to parquet files
         Arguments
         Requires a directory to write to; otherwise will use current 
         working directory
@@ -1750,12 +1734,6 @@ class PanelReader(object):
     
         def aux_write_separated(df, filename, separator = 'panel_year',
                             compr = 'brotli'):
-            # Convert pandas to Arrow if needed
-            if isinstance(df, pd.DataFrame):
-                if df.empty:
-                    return
-                df = pa.Table.from_pandas(df, preserve_index=False)
-
             if isinstance(df, pa.Table):
                 if df.num_rows == 0:
                     return

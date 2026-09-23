@@ -21,6 +21,6 @@ setup(
         "Operating System :: OS Independent",
     ],
     packages=['kiltsreader'],
-    install_requires=['pyarrow >= 17.0.0', 'pandas >= 1.5', 'numpy >= 1.23'],
+    install_requires=['pyarrow >= 17.0.0', 'numpy >= 1.23'],
     python_requires='>=3.9',
 )

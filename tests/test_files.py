@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pyarrow as pa
 import pytest
 
 from kiltsreader import RetailReader
@@ -100,3 +101,11 @@ def test_extraction_is_reused_and_redone_when_the_archive_changes(tmp_path):
     os.utime(archive, ns=(archive.stat().st_atime_ns, archive.stat().st_mtime_ns + 10**9))
     RetailReader(folder, verbose=False, extract_dir=extracted)
     assert sales.stat().st_mtime_ns != 1  # the archive changed: extracted again
+
+
+def test_tables_not_read_are_empty_arrow_tables(tmp_path):
+    make_retail(tmp_path)
+    rr = RetailReader(tmp_path, verbose=False)
+    for name in ["df_products", "df_sales", "df_stores", "df_rms", "df_extra"]:
+        table = getattr(rr, name)
+        assert isinstance(table, pa.Table) and table.num_rows == 0, name
