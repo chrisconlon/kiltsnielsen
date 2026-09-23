@@ -335,6 +335,31 @@ def _read_csv(self, filepath, **kwargs):
     return csv.read_csv(filepath, **kwargs)
 
 
+def _keep_shallowest(files, key, dir_read, description):
+    """One file per key: when the same Kilts file appears more than once under dir_read (for
+    example a second copy of the distribution in a subfolder), keep the copy with the shortest
+    path below dir_read and warn about the others. Raises if two copies are equally shallow,
+    because then there is no basis for choosing. Without this, which copy was read depended on
+    the file system's listing order, and a duplicated sales file was read twice.
+    """
+    groups = {}
+    for f in files:
+        groups.setdefault(key(f), []).append(f)
+    kept = []
+    for k, copies in groups.items():
+        copies = sorted(copies, key=lambda f: (len(f.relative_to(dir_read).parts), str(f)))
+        if len(copies) > 1:
+            if len(copies[0].relative_to(dir_read).parts) == len(copies[1].relative_to(dir_read).parts):
+                raise ValueError(
+                    f"{description}: {len(copies)} equally deep copies of {k} under {dir_read}: "
+                    f"{[str(c) for c in copies]}. Point dir_read at one copy.")
+            warnings.warn(
+                f"{description}: using {copies[0]}; ignoring duplicate(s) {[str(c) for c in copies[1:]]}",
+                UserWarning, stacklevel=3)
+        kept.append(copies[0])
+    return sorted(kept)
+
+
 def _has_data_files(files):
     """Check if file list contains Nielsen data files (not just stray docs)."""
     data_dirs = {'Movement_Files', 'Annual_Files', 'Master_Files'}
@@ -589,19 +614,24 @@ class RetailReader(object):
         # then, get the product TSV file
         # we want the one under /RMS/Master_Files/Latest
         # we do NOT want the Revised Panelist Files (if in Panel)
-        self.files_product = [f for f in self.files if
-                              (f.name == 'products.tsv')&
-                              (f.parent.name == 'Latest')&
-                              _is_master_files(f.parent.parent.name)]
+        self.files_product = _keep_shallowest(
+            [f for f in self.files if
+             (f.name == 'products.tsv')&
+             (f.parent.name == 'Latest')&
+             _is_master_files(f.parent.parent.name)],
+            lambda f: f.name, dir_read, "Master products")
 
         # Collect the Annual Files NOTE: currently unused
-        self.files_annual = [f for f in self.files
-                             if 'Annual_Files' in f.parts]
+        self.files_annual = _keep_shallowest(
+            [f for f in self.files if 'Annual_Files' in f.parts],
+            lambda f: f.name, dir_read, "Annual files")
 
 
         # Collect the Movement Files, i.e. the store-weekly sales files
-        self.files_sales = [f for f in self.files
-                            if 'Movement_Files' in f.parts]
+        # (one per group folder and module-year file name)
+        self.files_sales = _keep_shallowest(
+            [f for f in self.files if 'Movement_Files' in f.parts],
+            lambda f: (f.parent.name, f.name), dir_read, "Movement files")
         if not self.files_sales:
             raise FileNotFoundError(
                 f"Could not find Movement Files in {dir_read}. "
@@ -1092,7 +1122,7 @@ class RetailReader(object):
             if isinstance(self.df_products, pa.Table):
                 self.df_products = self.df_products.filter(
                     pc.is_in(self.df_products['upc'], value_set=sales_upcs))
-            else:
+            elif len(self.df_products):  # skipped when read_products() was not called
                 self.df_products = self.df_products[
                     self.df_products.upc.isin(sales_upcs.to_numpy())]
 
@@ -1175,30 +1205,22 @@ class PanelReader(object):
         self.files_master = [f for f in self.files
                              if _is_master_files(f.parts[-3])]
 
-        self.files_annual = [f for f in self.files
-                             if f.parts[-2] == 'Annual_Files']
+        self.files_annual = _keep_shallowest(
+            [f for f in self.files if f.parts[-2] == 'Annual_Files'],
+            lambda f: f.name, dir_read, "Annual files")
 
-        self.files_product = [f for f in self.files if
-                              (f.name == 'products.tsv')&
-                              (f.parent.name == 'Latest')&
-                              _is_master_files(f.parent.parent.name)&
-                              ('Revised_Panelist_Files' not in f.parts)
-                              ]
+        def master(name):
+            return _keep_shallowest(
+                [f for f in self.files if
+                 (f.name == name)&
+                 (f.parent.name == 'Latest')&
+                 _is_master_files(f.parent.parent.name)&
+                 ('Revised_Panelist_Files' not in f.parts)],
+                lambda f: f.name, dir_read, "Master files")
 
-        self.files_variations = [f for f in self.files if
-                                 (f.name == 'brand_variations.tsv')&
-                                 (f.parent.name == 'Latest')&
-                                 _is_master_files(f.parent.parent.name)&
-                                 ('Revised_Panelist_Files' not in f.parts)
-                                 ]
-
-
-        self.files_retailers = [f for f in self.files if
-                                (f.name == 'retailers.tsv')&
-                                (f.parent.name == 'Latest')&
-                                _is_master_files(f.parent.parent.name) &
-                                ('Revised_Panelist_Files' not in f.parts)
-                                ]
+        self.files_product = master('products.tsv')
+        self.files_variations = master('brand_variations.tsv')
+        self.files_retailers = master('retailers.tsv')
 
 
 

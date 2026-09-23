@@ -24,6 +24,8 @@ Get access through your institution at the [Kilts Center][kilts], then download:
 
 You can either extract the `.tgz` files or use them directly. If extracting, preserve the original directory structure.
 
+If the same file appears more than once under the folder you pass (for example a second copy of the distribution in a subfolder), the reader uses the copy with the shortest path below that folder and warns about the others; two equally deep copies are an error. Point the reader at one copy to silence the warning.
+
 > **Performance tip:** For large scanner archives (5GB+), extracting is **~100x faster** than reading from `.tgz`. Panel archives (~500MB each) show little difference. Extract for repeated use; use `.tgz` directly for one-off reads only if storage is an issue.
 
 ## Quick Start
